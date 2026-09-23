@@ -181,6 +181,16 @@
 
       <h3>Composição do Valor do Frete</h3>
       <p class="hint">Frete Peso = Custo &divide; MKP &middot; ICMS calculado "por dentro": Total = (Frete Peso + Ad Valorem + Pedágio) &divide; (1 &minus; alíquota)</p>
+
+      <div class="mkp-selecionado-row">
+        <label for="mkpSelecionado" class="campo-largo">MKP aplicado nesta cotação
+          <select id="mkpSelecionado">
+            <option value="">Padrão (calculado dos percentuais)</option>
+          </select>
+        </label>
+        <small class="hint">Escolha outro MKP cadastrado (aba "Parâmetros de Venda") pra recalcular a Composição abaixo com um cenário negociado diferente — só o escolhido aqui é salvo na cotação.</small>
+      </div>
+
       <div class="grid-4">
         <div class="composicao-col antt">
           <h4>Baseado no Custo ANTT</h4>
@@ -230,15 +240,6 @@
             </tbody>
           </table>
         </div>
-      </div>
-
-      <div class="mkp-selecionado-row">
-        <label for="mkpSelecionado" class="campo-largo">MKP aplicado nesta cotação
-          <select id="mkpSelecionado">
-            <option value="">Padrão (calculado dos percentuais)</option>
-          </select>
-        </label>
-        <small class="hint">Escolha outro MKP cadastrado (aba "Parâmetros de Venda") pra recalcular a Composição acima com uma margem negociada diferente — só o escolhido aqui é salvo na cotação.</small>
       </div>
 
       <small class="hint" id="icmsInfo"></small>
@@ -415,17 +416,23 @@
     <div class="card">
       <h2>MKPs Cadastrados</h2>
       <p class="hint">
-        Cadastre outros MKPs negociados (ex.: uma margem menor fechada com o cliente) pra
-        escolher na Calculadora, abaixo da Composição do Valor do Frete — sem precisar mudar
-        os percentuais acima toda vez. O MKP calculado a partir dos percentuais acima continua
-        disponível lá como opção "Padrão".
+        Cadastre outros cenários de venda negociados (ex.: uma margem menor fechada com o
+        cliente), com os mesmos campos de cima, pra escolher na Calculadora abaixo da
+        Composição do Valor do Frete — sem precisar mudar os percentuais acima toda vez. O MKP
+        de cada um é calculado igual ao de cima (1 &minus; soma dos % &divide; 100). O cadastro
+        acima continua disponível lá como opção "Padrão".
       </p>
-      <table class="editable-table" id="tabelaMkp">
-        <thead>
-          <tr><th>Nome</th><th>MKP</th><th></th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+      <div class="tabela-scroll tabela-scroll-x">
+        <table class="editable-table" id="tabelaMkp">
+          <thead>
+            <tr>
+              <th>Nome</th><th>% Custo Fixo</th><th>% Impostos</th><th>% Margem</th>
+              <th>% Comissão</th><th>% Ad Valorem</th><th>MKP</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <button type="button" id="btnAddMkp" class="btn-secondary">+ Adicionar MKP</button>
       <button type="button" id="btnSalvarMkp" class="btn-primary">Salvar Cadastro de MKPs</button>
       <span class="save-msg" id="msgMkp"></span>

@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 13:21";
+const BUILD_TIMESTAMP = "23/09/2026 13:53";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -1003,24 +1003,31 @@ function preencherSelects() {
 /* ============================================================
    Cálculo principal
    ============================================================ */
-function calcularMkp() {
-  // MKP = 1 - (soma dos percentuais / 100). Preço de venda = Custo ÷ MKP.
-  const soma = (Number(vendaParams.pctCustoFixo) || 0) + (Number(vendaParams.pctImpostos) || 0) + (Number(vendaParams.pctMargem) || 0) + (Number(vendaParams.pctComissao) || 0);
+// MKP = 1 - (soma de Custo Fixo + Impostos + Margem + Comissão / 100). Ad Valorem não entra
+// nessa soma — é aplicado à parte, sobre o valor da mercadoria. Mesma fórmula tanto pro
+// cadastro "Padrão" (aba Parâmetros de Venda) quanto pra cada MKP cadastrado abaixo dele.
+function mkpDePercentuais(p) {
+  const soma = (Number(p.pctCustoFixo) || 0) + (Number(p.pctImpostos) || 0) + (Number(p.pctMargem) || 0) + (Number(p.pctComissao) || 0);
   const mkp = 1 - soma / 100;
   return { soma, mkp: mkp > 0 ? mkp : null };
 }
 
-/** MKP em uso na Calculadora: o "Padrão" (calculado dos percentuais, aba Parâmetros de
+function calcularMkp() {
+  return mkpDePercentuais(vendaParams);
+}
+
+/** Cenário de venda em uso na Calculadora: o "Padrão" (percentuais da aba Parâmetros de
     Venda) ou um dos MKPs cadastrados, conforme o seletor "MKP aplicado nesta cotação"
-    (abaixo da Composição do Valor do Frete). Nunca muda os percentuais/MKP padrão — só troca
-    o divisor usado no cálculo desta cotação. */
+    (abaixo da Composição do Valor do Frete) — traz consigo os mesmos campos do Padrão
+    (Custo Fixo/Impostos/Margem/Comissão/Ad Valorem), pro DRE também refletir o cenário
+    escolhido. Nunca muda o cadastro Padrão — só troca o que é usado nesta cotação. */
 function mkpAtivo() {
   const idx = $("mkpSelecionado").value;
   if (idx !== "") {
     const escolhido = mkpTable[parseInt(idx, 10)];
-    if (escolhido) return { mkp: escolhido.valor > 0 ? escolhido.valor : null, nome: escolhido.nome };
+    if (escolhido) return { ...escolhido, ...mkpDePercentuais(escolhido), nome: escolhido.nome };
   }
-  return { mkp: calcularMkp().mkp, nome: "Padrão (calculado dos percentuais)" };
+  return { ...vendaParams, ...calcularMkp(), nome: "Padrão (calculado dos percentuais)" };
 }
 
 /* ------------------------------------------------------------
@@ -1288,8 +1295,9 @@ function preencherColunaOpcional(tbodyId, prefixo, linha, mensagemVazia) {
 function atualizarComposicao() {
   if ($("resultsCard").hidden) return;
 
-  const { mkp, nome: mkpNome } = mkpAtivo();
-  const pctAdval = Number(vendaParams.pctAdvalorem) || 0;
+  const ativo = mkpAtivo();
+  const { mkp, nome: mkpNome } = ativo;
+  const pctAdval = Number(ativo.pctAdvalorem) || 0;
   const valorMercadoria = parseFloat($("valorMercadoria").value) || 0;
   const advalorem = valorMercadoria * (pctAdval / 100);
   const pedagio = state.pedagio || 0;
@@ -1315,10 +1323,10 @@ function atualizarComposicao() {
 
   state.mkp = mkp;
   state.mkpNome = mkpNome;
-  state.pctCustoFixo = Number(vendaParams.pctCustoFixo) || 0;
-  state.pctImpostos = Number(vendaParams.pctImpostos) || 0;
-  state.pctMargem = Number(vendaParams.pctMargem) || 0;
-  state.pctComissao = Number(vendaParams.pctComissao) || 0;
+  state.pctCustoFixo = Number(ativo.pctCustoFixo) || 0;
+  state.pctImpostos = Number(ativo.pctImpostos) || 0;
+  state.pctMargem = Number(ativo.pctMargem) || 0;
+  state.pctComissao = Number(ativo.pctComissao) || 0;
   state.pctAdvalorem = pctAdval;
   state.advalorem = advalorem;
   state.aliquotaIcms = aliquota;
@@ -1750,7 +1758,12 @@ function renderTabelaMkp() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><input type="text" value="${row.nome || ""}" placeholder="Ex.: Negociado cliente X" data-field="nome" data-idx="${idx}"></td>
-      <td><input type="number" min="0" max="1" step="0.0001" value="${row.valor ?? ""}" placeholder="0,7000" data-field="valor" data-idx="${idx}"></td>
+      <td><input type="number" min="0" max="99" step="0.1" value="${row.pctCustoFixo ?? 0}" data-field="pctCustoFixo" data-idx="${idx}"></td>
+      <td><input type="number" min="0" max="99" step="0.1" value="${row.pctImpostos ?? 0}" data-field="pctImpostos" data-idx="${idx}"></td>
+      <td><input type="number" min="0" max="99" step="0.1" value="${row.pctMargem ?? 0}" data-field="pctMargem" data-idx="${idx}"></td>
+      <td><input type="number" min="0" max="99" step="0.1" value="${row.pctComissao ?? 0}" data-field="pctComissao" data-idx="${idx}"></td>
+      <td><input type="number" min="0" max="99" step="0.01" value="${row.pctAdvalorem ?? 0}" data-field="pctAdvalorem" data-idx="${idx}"></td>
+      <td class="mkp-calculado" data-mkp-calculado="${idx}">${fmtNum(mkpDePercentuais(row).mkp, 4)}</td>
       <td><button type="button" class="btn-remove" data-remove="${idx}" title="Remover">&times;</button></td>
     `;
     tbody.appendChild(tr);
@@ -1760,7 +1773,9 @@ function renderTabelaMkp() {
     inp.addEventListener("input", () => {
       const idx = parseInt(inp.dataset.idx, 10);
       const field = inp.dataset.field;
-      mkpTable[idx][field] = field === "valor" ? parseFloat(inp.value) || 0 : inp.value;
+      mkpTable[idx][field] = field === "nome" ? inp.value : parseFloat(inp.value) || 0;
+      const { mkp } = mkpDePercentuais(mkpTable[idx]);
+      tbody.querySelector(`[data-mkp-calculado="${idx}"]`).textContent = mkp ? fmtNum(mkp, 4) : "indefinido";
     });
   });
   tbody.querySelectorAll("[data-remove]").forEach((btn) => {
@@ -1776,18 +1791,21 @@ function renderTabelaMkp() {
 function preencherSelectMkp() {
   const sel = $("mkpSelecionado");
   const atual = sel.value;
-  const opcoes = mkpTable.map((m, idx) => `<option value="${idx}">${m.nome || "MKP " + (idx + 1)} — ${fmtNum(m.valor, 4)}</option>`);
+  const opcoes = mkpTable.map((m, idx) => {
+    const { mkp } = mkpDePercentuais(m);
+    return `<option value="${idx}">${m.nome || "MKP " + (idx + 1)} — ${mkp ? fmtNum(mkp, 4) : "indefinido"}</option>`;
+  });
   sel.innerHTML = [`<option value="">Padrão (calculado dos percentuais)</option>`, ...opcoes].join("");
   if (atual && atual < mkpTable.length) sel.value = atual;
 }
 
 $("btnAddMkp").addEventListener("click", () => {
-  mkpTable.push({ nome: "", valor: 0 });
+  mkpTable.push({ nome: "", pctCustoFixo: 0, pctImpostos: 0, pctMargem: 0, pctComissao: 0, pctAdvalorem: 0 });
   renderTabelaMkp();
 });
 
 $("btnSalvarMkp").addEventListener("click", async () => {
-  mkpTable = mkpTable.filter((m) => m.nome && m.nome.trim() && m.valor > 0);
+  mkpTable = mkpTable.filter((m) => m.nome && m.nome.trim());
   await salvarConfig("mkp", mkpTable);
   renderTabelaMkp();
   preencherSelectMkp();

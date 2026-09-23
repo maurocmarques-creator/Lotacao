@@ -221,7 +221,7 @@ input:focus, select:focus { outline: none; border-color: var(--blue-500); box-sh
 
 .save-msg { margin-left: 12px; font-size: 12.5px; color: var(--green-600); }
 .salvar-cotacao-row { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gray-200); }
-.mkp-selecionado-row { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gray-200); }
+.mkp-selecionado-row { margin: 12px 0 20px; }
 .mkp-selecionado-row label { margin-bottom: 6px; }
 .spot-import-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .spot-import-row label { display: flex; flex-direction: column; font-size: 13px; color: var(--gray-600); }
@@ -354,6 +354,7 @@ table.editable-table th {
 }
 table.editable-table td { padding: 6px; border-bottom: 1px solid var(--gray-200); }
 table.editable-table input, table.editable-table select { width: 100%; }
+table.editable-table td.mkp-calculado { font-weight: 700; color: var(--blue-900); white-space: nowrap; }
 .btn-remove {
   background: #fdecea; color: #c0392b; border: none; border-radius: 6px;
   width: 28px; height: 28px; cursor: pointer; font-weight: 700;

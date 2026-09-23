@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 15:54";
+const BUILD_TIMESTAMP = "23/09/2026 16:04";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -178,6 +178,8 @@ const state = {
   servicoAdicionalValor: 0,
   ufOrigem: "",
   ufDestino: "",
+  origemLat: null,
+  origemLon: null,
   valorMercadoria: 0,
   // Detalhes do custo ANTT (preenchidos em calcular())
   eixos: null,
@@ -896,6 +898,8 @@ async function executarCalculoKm() {
     }
     state.ufOrigem = origem.uf || "";
     state.ufDestino = destino.uf || "";
+    state.origemLat = origem.coords ? origem.coords.lat : null;
+    state.origemLon = origem.coords ? origem.coords.lon : null;
     atualizarComposicao();
 
     // Guarda os pontos pro Mapa da Rota (desenhado em aplicarAjusteEExibir, já com o KM final).
@@ -1032,12 +1036,14 @@ function obterAliquotaIcms(ufOrigem, ufDestino) {
    ------------------------------------------------------------ */
 /** Mostra um aviso destacado sobre a disponibilidade de SPOT para este trecho, para deixar
  * claro para quem está cotando se o quadro SPOT tem valor cadastrado ou não. */
-function atualizarSpotInfoBox(spot, km) {
+function atualizarSpotInfoBox(spot, km, viaHub) {
   const box = $("spotInfoBox");
   box.hidden = false;
   if (spot) {
     box.className = "spot-info-box ok";
-    box.textContent = "✓ Valor SPOT cadastrado para este trecho e veículo — tabela com assertividade de 100% para trechos acima de 600 km.";
+    box.textContent = viaHub
+      ? "✓ Valor SPOT aplicado via hub Itajaí - SC (origem no raio de 50 km) — tabela com assertividade de 100% para trechos acima de 600 km."
+      : "✓ Valor SPOT cadastrado para este trecho e veículo — tabela com assertividade de 100% para trechos acima de 600 km.";
   } else {
     box.className = "spot-info-box warn";
     box.textContent = "⚠ Sem valor SPOT cadastrado para este trecho — apenas o Custo ANTT e o Custo por KM estão disponíveis, sem apresentação de valores pela controladoria de SPOT.";
@@ -1072,9 +1078,17 @@ async function calcular() {
   // SPOT é Origem → cidade mais distante (o mesmo par usado no KM) — se houver cadastro pra
   // esse par, traz o valor; o aviso abaixo continua pedindo pra somar o custo das entregas
   // adicionais (pontos intermediários podem não estar cobertos pelo valor fechado do SPOT).
-  const spot = buscarSpot($("cidadeOrigem").value, textoDestinoAtivo(), veiculo);
+  // Sem cadastro exato pra cidade digitada, mas dentro do raio de 50 km de Itajaí/SC ou São
+  // Paulo capital, usa o SPOT cadastrado com origem Itajaí - SC pro mesmo destino/veículo.
+  const { spot, viaHub: spotViaHub } = buscarSpotComHub(
+    $("cidadeOrigem").value,
+    textoDestinoAtivo(),
+    veiculo,
+    state.origemLat,
+    state.origemLon
+  );
   const custoSpot = spot ? spot.valor + servicoAdicionalValor : null;
-  atualizarSpotInfoBox(spot, km);
+  atualizarSpotInfoBox(spot, km, spotViaHub);
 
   let custoAntt = linhaAntt.ccd * km + linhaAntt.cc + pedagio + servicoAdicionalValor;
 
@@ -1114,15 +1128,23 @@ async function calcular() {
 
   if (spot) {
     $("resSpot").textContent = fmtBRL(custoSpot);
-    $("resSpotFormula").textContent = `${fmtBRL(spot.valor)} (SPOT cadastrado, sem pedágio)${servicoAdicionalTexto} — ${veiculo}`;
+    $("resSpotFormula").textContent = spotViaHub
+      ? `${fmtBRL(spot.valor)} (SPOT de Itajaí - SC, aplicado por origem no raio de 50 km do hub)${servicoAdicionalTexto} — ${veiculo}`
+      : `${fmtBRL(spot.valor)} (SPOT cadastrado, sem pedágio)${servicoAdicionalTexto} — ${veiculo}`;
     // SPOT cobre só Origem → o ponto usado no cálculo — com pontos adicionais cadastrados,
     // o valor pode não incluir o custo deles (ex.: paradas intermediárias), então precisa
-    // avisar pra somar à parte.
+    // avisar pra somar à parte. Quando vem do hub Itajaí (sem cadastro exato pra cidade
+    // digitada), avisa isso também.
     const temEntregasAdicionais = listarPontosEntregaExtras().length > 0;
-    $("resSpotAviso").hidden = !temEntregasAdicionais;
-    $("resSpotAviso").textContent = temEntregasAdicionais
-      ? `⚠ Este SPOT cobre só Origem → ${textoDestinoAtivo()} (ponto mais distante). Inclua o custo das entregas adicionais em "Serviço Adicional".`
-      : "";
+    const avisos = [];
+    if (spotViaHub) {
+      avisos.push(`ℹ Sem cadastro exato para "${$("cidadeOrigem").value.trim()}" — usando o SPOT de Itajaí - SC (origem no raio de 50 km do hub).`);
+    }
+    if (temEntregasAdicionais) {
+      avisos.push(`⚠ Este SPOT cobre só Origem → ${textoDestinoAtivo()} (ponto mais distante). Inclua o custo das entregas adicionais em "Serviço Adicional".`);
+    }
+    $("resSpotAviso").hidden = avisos.length === 0;
+    $("resSpotAviso").textContent = avisos.join(" ");
   } else {
     $("resSpot").textContent = "—";
     $("resSpotFormula").textContent = "Sem SPOT cadastrado para este trecho e veículo.";
@@ -1495,6 +1517,36 @@ function buscarSpot(origemTxt, destinoTxt, veiculo) {
   const d = normalizarLocalSpot(destinoTxt);
   if (!o || !d) return null;
   return spotTable.find((r) => normalizarLocalSpot(r.origem) === o && normalizarLocalSpot(r.destino) === d && r.veiculo === veiculo) || null;
+}
+
+// Hubs de origem do SPOT: cidade digitada num raio de 50 km de Itajaí/SC ou de São Paulo
+// capital pode usar o SPOT cadastrado com origem "Itajaí - SC" pro mesmo destino/veículo,
+// mesmo sem cadastro exato pra ela — cobre a região de atuação sem precisar cadastrar cidade
+// por cidade (ex.: Balneário Camboriú, Navegantes, Camboriú etc. herdam o SPOT de Itajaí).
+const HUB_SPOT_ITAJAI = { lat: -26.9078, lon: -48.6708, nome: "Itajaí - SC" };
+const HUB_SPOT_SAO_PAULO = { lat: -23.5505, lon: -46.6333, nome: "São Paulo - SP" };
+const RAIO_HUB_SPOT_KM = 50;
+
+function origemNoRaioDeHubSpot(origemLat, origemLon) {
+  if (origemLat == null || origemLon == null) return false;
+  return (
+    haversineKm(origemLat, origemLon, HUB_SPOT_ITAJAI.lat, HUB_SPOT_ITAJAI.lon) <= RAIO_HUB_SPOT_KM ||
+    haversineKm(origemLat, origemLon, HUB_SPOT_SAO_PAULO.lat, HUB_SPOT_SAO_PAULO.lon) <= RAIO_HUB_SPOT_KM
+  );
+}
+
+/** Procura o SPOT do trecho: primeiro pela cidade exata digitada; sem cadastro pra ela e com
+ * a origem no raio de 50 km de Itajaí/SC ou São Paulo capital, tenta de novo usando
+ * "Itajaí - SC" como origem (mesmo destino/veículo) — ver origemNoRaioDeHubSpot acima.
+ * Retorna { spot, viaHub } — viaHub avisa que o valor veio do hub, não de um cadastro exato
+ * pra cidade digitada, pra não passar a impressão de que há cadastro específico pra ela. */
+function buscarSpotComHub(origemTxt, destinoTxt, veiculo, origemLat, origemLon) {
+  const direto = buscarSpot(origemTxt, destinoTxt, veiculo);
+  if (direto) return { spot: direto, viaHub: false };
+  if (normalizarLocalSpot(origemTxt) === normalizarLocalSpot(HUB_SPOT_ITAJAI.nome)) return { spot: null, viaHub: false };
+  if (!origemNoRaioDeHubSpot(origemLat, origemLon)) return { spot: null, viaHub: false };
+  const viaHub = buscarSpot(HUB_SPOT_ITAJAI.nome, destinoTxt, veiculo);
+  return { spot: viaHub, viaHub: !!viaHub };
 }
 
 /* ============================================================
@@ -2500,6 +2552,8 @@ function limparFormularioParaNovaCotacao() {
   state.servicoAdicionalValor = 0;
   state.ufOrigem = "";
   state.ufDestino = "";
+  state.origemLat = null;
+  state.origemLon = null;
   state.valorMercadoria = 0;
   state.eixos = null;
 

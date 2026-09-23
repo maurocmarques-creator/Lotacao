@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 13:09";
+const BUILD_TIMESTAMP = "23/09/2026 13:21";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -125,11 +125,12 @@ let qualpApiKey = "";
 let anttConfig = { freightType: "A", loadType: "geral", isEmptyReturn: false };
 let vendedoresTable = [];
 let spotTable = [];
+let mkpTable = [];
 let historicoCotacoes = [];
 
 /** Busca todos os cadastros e o histórico no Supabase; roda uma vez, antes da tela renderizar. */
 async function carregarDadosIniciais() {
-  const [antt, veiculos, venda, icms, ajusteKm, ors, qualp, anttCfg, vendedores, spot, historico] = await Promise.all([
+  const [antt, veiculos, venda, icms, ajusteKm, ors, qualp, anttCfg, vendedores, spot, mkp, historico] = await Promise.all([
     carregarConfig("antt", DEFAULT_ANTT),
     carregarConfig("veiculos", DEFAULT_VEICULOS),
     carregarConfig("venda", DEFAULT_VENDA),
@@ -140,6 +141,7 @@ async function carregarDadosIniciais() {
     carregarConfig("anttConfig", { freightType: "A", loadType: "geral", isEmptyReturn: false }),
     carregarConfig("vendedores", []),
     carregarConfig("spot", []),
+    carregarConfig("mkp", []),
     carregarHistorico(),
   ]);
 
@@ -160,6 +162,7 @@ async function carregarDadosIniciais() {
   anttConfig = anttCfg;
   vendedoresTable = vendedores;
   spotTable = spot;
+  mkpTable = mkp;
   historicoCotacoes = historico;
 }
 
@@ -201,6 +204,7 @@ const state = {
   ajusteKmPct: 0,
   // Detalhes da composição (preenchidos em atualizarComposicao())
   mkp: null,
+  mkpNome: "",
   pctCustoFixo: 0,
   pctImpostos: 0,
   pctMargem: 0,
@@ -1006,6 +1010,19 @@ function calcularMkp() {
   return { soma, mkp: mkp > 0 ? mkp : null };
 }
 
+/** MKP em uso na Calculadora: o "Padrão" (calculado dos percentuais, aba Parâmetros de
+    Venda) ou um dos MKPs cadastrados, conforme o seletor "MKP aplicado nesta cotação"
+    (abaixo da Composição do Valor do Frete). Nunca muda os percentuais/MKP padrão — só troca
+    o divisor usado no cálculo desta cotação. */
+function mkpAtivo() {
+  const idx = $("mkpSelecionado").value;
+  if (idx !== "") {
+    const escolhido = mkpTable[parseInt(idx, 10)];
+    if (escolhido) return { mkp: escolhido.valor > 0 ? escolhido.valor : null, nome: escolhido.nome };
+  }
+  return { mkp: calcularMkp().mkp, nome: "Padrão (calculado dos percentuais)" };
+}
+
 /* ------------------------------------------------------------
    ICMS interestadual: regra padrão (Resolução SF 22/89) + cadastro
    de exceções (icmsTable), usado para o cálculo "por dentro".
@@ -1271,7 +1288,7 @@ function preencherColunaOpcional(tbodyId, prefixo, linha, mensagemVazia) {
 function atualizarComposicao() {
   if ($("resultsCard").hidden) return;
 
-  const { mkp } = calcularMkp();
+  const { mkp, nome: mkpNome } = mkpAtivo();
   const pctAdval = Number(vendaParams.pctAdvalorem) || 0;
   const valorMercadoria = parseFloat($("valorMercadoria").value) || 0;
   const advalorem = valorMercadoria * (pctAdval / 100);
@@ -1297,6 +1314,7 @@ function atualizarComposicao() {
   preencherColunaOpcional("composicaoEfetivoBody", "Efetivo", linhaEfetivo, "Sem Custo Efetivo disponível (rota com menos de 200 km sem SPOT cadastrado).");
 
   state.mkp = mkp;
+  state.mkpNome = mkpNome;
   state.pctCustoFixo = Number(vendaParams.pctCustoFixo) || 0;
   state.pctImpostos = Number(vendaParams.pctImpostos) || 0;
   state.pctMargem = Number(vendaParams.pctMargem) || 0;
@@ -1310,7 +1328,7 @@ function atualizarComposicao() {
   state.compSpot = linhaSpot;
   state.compEfetivo = linhaEfetivo;
 
-  const partes = [`MKP: ${mkp ? fmtNum(mkp, 4) : "indefinido (percentuais somam 100% ou mais)"}`];
+  const partes = [`MKP: ${mkp ? `${fmtNum(mkp, 4)} (${mkpNome})` : "indefinido (percentuais somam 100% ou mais)"}`];
   if (aliquota !== null) {
     partes.push(`ICMS ${ufOrigem || "?"} → ${ufDestino || "?"}: ${fmtNum(aliquota, 2)}% (${fonte})`);
   } else {
@@ -1321,6 +1339,7 @@ function atualizarComposicao() {
 
 $("btnCalcular").addEventListener("click", calcular);
 $("valorMercadoria").addEventListener("input", atualizarComposicao);
+$("mkpSelecionado").addEventListener("change", atualizarComposicao);
 
 /* ============================================================
    Aba Cadastro ANTT — parâmetros da API QualP (Tabela/Carga/Retorno vazio)
@@ -1721,12 +1740,68 @@ $("btnSalvarVenda").addEventListener("click", async () => {
 });
 
 /* ============================================================
+   MKPs Cadastrados (dentro da aba Parâmetros de Venda) — outras margens
+   negociadas, escolhidas na Calculadora sem mudar os percentuais acima.
+   ============================================================ */
+function renderTabelaMkp() {
+  const tbody = $("tabelaMkp").querySelector("tbody");
+  tbody.innerHTML = "";
+  mkpTable.forEach((row, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="text" value="${row.nome || ""}" placeholder="Ex.: Negociado cliente X" data-field="nome" data-idx="${idx}"></td>
+      <td><input type="number" min="0" max="1" step="0.0001" value="${row.valor ?? ""}" placeholder="0,7000" data-field="valor" data-idx="${idx}"></td>
+      <td><button type="button" class="btn-remove" data-remove="${idx}" title="Remover">&times;</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("input").forEach((inp) => {
+    inp.addEventListener("input", () => {
+      const idx = parseInt(inp.dataset.idx, 10);
+      const field = inp.dataset.field;
+      mkpTable[idx][field] = field === "valor" ? parseFloat(inp.value) || 0 : inp.value;
+    });
+  });
+  tbody.querySelectorAll("[data-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      mkpTable.splice(parseInt(btn.dataset.remove, 10), 1);
+      renderTabelaMkp();
+    });
+  });
+}
+
+/** Preenche o seletor "MKP aplicado nesta cotação" na Calculadora — "Padrão" (percentuais
+    acima) sempre primeiro, seguido dos MKPs cadastrados. Mantém a escolha atual se possível. */
+function preencherSelectMkp() {
+  const sel = $("mkpSelecionado");
+  const atual = sel.value;
+  const opcoes = mkpTable.map((m, idx) => `<option value="${idx}">${m.nome || "MKP " + (idx + 1)} — ${fmtNum(m.valor, 4)}</option>`);
+  sel.innerHTML = [`<option value="">Padrão (calculado dos percentuais)</option>`, ...opcoes].join("");
+  if (atual && atual < mkpTable.length) sel.value = atual;
+}
+
+$("btnAddMkp").addEventListener("click", () => {
+  mkpTable.push({ nome: "", valor: 0 });
+  renderTabelaMkp();
+});
+
+$("btnSalvarMkp").addEventListener("click", async () => {
+  mkpTable = mkpTable.filter((m) => m.nome && m.nome.trim() && m.valor > 0);
+  await salvarConfig("mkp", mkpTable);
+  renderTabelaMkp();
+  preencherSelectMkp();
+  $("msgMkp").textContent = "Cadastro salvo.";
+  setTimeout(() => ($("msgMkp").textContent = ""), 2500);
+});
+
+/* ============================================================
    Aba Backup / Migração de Dados (exporta/importa tudo em .json — serve
    tanto de cópia de segurança quanto para trazer dados salvos antes desta
    versão, de quando cada navegador guardava seu próprio localStorage, para
    o banco compartilhado usado agora por todo mundo que acessa o site)
    ============================================================ */
-const CHAVES_CONFIG_BACKUP = ["antt", "veiculos", "venda", "icms", "ajusteKm", "orsApiKey", "qualpApiKey", "anttConfig", "vendedores", "spot"];
+const CHAVES_CONFIG_BACKUP = ["antt", "veiculos", "venda", "icms", "ajusteKm", "orsApiKey", "qualpApiKey", "anttConfig", "vendedores", "spot", "mkp"];
 
 function exportarBackupCompleto() {
   const dados = {
@@ -2136,7 +2211,7 @@ function abrirDetalheCotacao(id) {
     partes.push(linhaCampo("% Impostos Federais", `${fmtNum(c.pctImpostos, 1)}%`));
     partes.push(linhaCampo("% Margem Esperada", `${fmtNum(c.pctMargem, 1)}%`));
     partes.push(linhaCampo("% Comissão", `${fmtNum(c.pctComissao, 1)}%`));
-    partes.push(linhaCampo("MKP utilizado", c.mkp ? fmtNum(c.mkp, 4) : "indefinido"));
+    partes.push(linhaCampo("MKP utilizado", c.mkp ? `${fmtNum(c.mkp, 4)}${c.mkpNome ? " — " + c.mkpNome : ""}` : "indefinido"));
     partes.push(linhaCampo("% Ad Valorem", `${fmtNum(c.pctAdvalorem, 2)}%`));
   }
 
@@ -2304,7 +2379,7 @@ function abrirDreProjetado(id) {
     return;
   }
 
-  $("dreSubtitulo").textContent = `${c.origem || "?"} → ${c.destino || "?"} · ${fmtDataHora(c.criadoEm)} · Vendedor: ${c.vendedor || "—"}`;
+  $("dreSubtitulo").textContent = `${c.origem || "?"} → ${c.destino || "?"} · ${fmtDataHora(c.criadoEm)} · Vendedor: ${c.vendedor || "—"} · MKP: ${c.mkp ? fmtNum(c.mkp, 4) : "—"}${c.mkpNome ? " (" + c.mkpNome + ")" : ""}`;
 
   if (efetivoNaoSuportado || semEfetivo) {
     $("dreTabelaEfetivo").innerHTML = "";
@@ -2479,6 +2554,7 @@ async function salvarCotacao() {
 
     // Markup / Ad Valorem
     mkp: state.mkp,
+    mkpNome: state.mkpNome || "",
     pctCustoFixo: state.pctCustoFixo || 0,
     pctImpostos: state.pctImpostos || 0,
     pctMargem: state.pctMargem || 0,
@@ -2535,6 +2611,7 @@ function limparFormularioParaNovaCotacao() {
   $("tipoVeiculo").selectedIndex = 0;
   $("servicoAdicionalDescricao").value = "";
   $("servicoAdicionalValor").value = "0";
+  $("mkpSelecionado").value = "";
 
   ultimoKmBruto = null;
   ultimaFonteKm = null;
@@ -2589,7 +2666,7 @@ $("btnExportarHistorico").addEventListener("click", () => {
     "Eixos", "Veículo ANTT", "Veículo Mercado", "R$/km Mercado", "SPOT Disponível", "Valor SPOT", "Valor Mercadoria",
     "Fonte ANTT", "CCD", "CC", "Frete-peso API", "Carga/Descarga API", "Resolução ANTT",
     "Custo ANTT (operação)", "Custo por KM (operação)", "Custo SPOT (operação)", "Custo Efetivo (operação)", "Serviço Adicional (descrição)", "Serviço Adicional (R$)",
-    "% Custo Fixo", "% Impostos", "% Margem", "% Comissão", "MKP", "% Ad Valorem", "Ad Valorem (R$)",
+    "% Custo Fixo", "% Impostos", "% Margem", "% Comissão", "MKP", "MKP Nome", "% Ad Valorem", "Ad Valorem (R$)",
     "Alíquota ICMS", "Fonte ICMS",
     "Frete Peso ANTT", "ICMS ANTT", "Total ANTT",
     "Frete Peso Mercado", "ICMS Mercado", "Total Mercado",
@@ -2606,7 +2683,7 @@ $("btnExportarHistorico").addEventListener("click", () => {
       c.anttFonte === "api" ? "API QualP" : "Cadastro manual", c.anttCcd, c.anttCc,
       c.anttFreightCost, c.anttLoadUnloadCost, c.anttResolucao,
       c.custoAntt, c.custoAprox, c.custoSpot, c.custoEfetivo, c.servicoAdicionalDescricao, c.servicoAdicionalValor,
-      c.pctCustoFixo, c.pctImpostos, c.pctMargem, c.pctComissao, c.mkp, c.pctAdvalorem, c.advalorem,
+      c.pctCustoFixo, c.pctImpostos, c.pctMargem, c.pctComissao, c.mkp, c.mkpNome, c.pctAdvalorem, c.advalorem,
       c.aliquotaIcms, c.fonteIcms,
       c.fretePesoAntt, c.icmsAntt, c.totalAntt,
       c.fretePesoMerc, c.icmsMerc, c.totalMerc,
@@ -2878,6 +2955,8 @@ async function iniciarApp() {
   renderTabelaVeiculos();
   renderTabelaSpot();
   renderVenda();
+  renderTabelaMkp();
+  preencherSelectMkp();
   preencherFiltroIcms();
   renderTabelaIcms();
   $("ajusteKm").value = ajusteKmPct;

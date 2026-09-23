@@ -231,6 +231,16 @@
           </table>
         </div>
       </div>
+
+      <div class="mkp-selecionado-row">
+        <label for="mkpSelecionado" class="campo-largo">MKP aplicado nesta cotação
+          <select id="mkpSelecionado">
+            <option value="">Padrão (calculado dos percentuais)</option>
+          </select>
+        </label>
+        <small class="hint">Escolha outro MKP cadastrado (aba "Parâmetros de Venda") pra recalcular a Composição acima com uma margem negociada diferente — só o escolhido aqui é salvo na cotação.</small>
+      </div>
+
       <small class="hint" id="icmsInfo"></small>
       <div class="salvar-cotacao-row">
         <button type="button" id="btnSalvarCotacao" class="btn-primary">Salvar Cotação</button>
@@ -400,6 +410,25 @@
 
       <button type="button" id="btnSalvarVenda" class="btn-primary">Salvar Parâmetros</button>
       <span class="save-msg" id="msgVenda"></span>
+    </div>
+
+    <div class="card">
+      <h2>MKPs Cadastrados</h2>
+      <p class="hint">
+        Cadastre outros MKPs negociados (ex.: uma margem menor fechada com o cliente) pra
+        escolher na Calculadora, abaixo da Composição do Valor do Frete — sem precisar mudar
+        os percentuais acima toda vez. O MKP calculado a partir dos percentuais acima continua
+        disponível lá como opção "Padrão".
+      </p>
+      <table class="editable-table" id="tabelaMkp">
+        <thead>
+          <tr><th>Nome</th><th>MKP</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <button type="button" id="btnAddMkp" class="btn-secondary">+ Adicionar MKP</button>
+      <button type="button" id="btnSalvarMkp" class="btn-primary">Salvar Cadastro de MKPs</button>
+      <span class="save-msg" id="msgMkp"></span>
     </div>
   </section>
 

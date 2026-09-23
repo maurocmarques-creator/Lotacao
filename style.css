@@ -221,6 +221,8 @@ input:focus, select:focus { outline: none; border-color: var(--blue-500); box-sh
 
 .save-msg { margin-left: 12px; font-size: 12.5px; color: var(--green-600); }
 .salvar-cotacao-row { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gray-200); }
+.mkp-selecionado-row { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gray-200); }
+.mkp-selecionado-row label { margin-bottom: 6px; }
 .spot-import-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .spot-import-row label { display: flex; flex-direction: column; font-size: 13px; color: var(--gray-600); }
 

@@ -83,10 +83,13 @@
           </div>
         </label>
         <div class="address-feedback" id="feedbackDestino"></div>
+        <small class="hint" id="destinoAtivoInfo"></small>
+        <input type="hidden" id="cepDestinoAtivo">
+        <input type="hidden" id="cidadeDestinoAtivo">
 
         <div id="destinosExtrasContainer"></div>
         <button type="button" id="btnAddDestino" class="btn-secondary destino-extra-add">+ Adicionar ponto de entrega</button>
-        <small class="hint">Com mais de um ponto de entrega, a distância considerada é a do trecho mais longo (Origem &rarr; ponto mais distante).</small>
+        <small class="hint">Com mais de um ponto de entrega, cada um fica registrado na ordem em que foi digitado — a distância considerada para o cálculo é sempre a do trecho mais longo (Origem &rarr; ponto mais distante), sem alterar o que você digitou em cada campo.</small>
       </div>
 
     </div>

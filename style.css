@@ -321,7 +321,9 @@ table.editable-table input, table.editable-table select { width: 100%; }
 }
 .btn-remove:hover { background: #f8d3d0; }
 
-.destino-extra-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.destino-extra-group { margin-top: 8px; }
+.destino-extra-row { display: flex; align-items: center; gap: 8px; }
+.destino-extra-row .destino-extra-cep { flex: 0 0 110px; width: 110px; }
 .destino-extra-row .autocomplete-wrap { flex: 1; }
 .destino-extra-add { margin-top: 8px; }
 

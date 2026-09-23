@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 10:23";
+const BUILD_TIMESTAMP = "23/09/2026 10:34";
 
 /* ============================================================
    Persistência (localStorage) — troque por chamadas de API
@@ -605,30 +605,39 @@ $("ajusteKm").addEventListener("input", () => {
 
 /* ============================================================
    Múltiplos pontos de entrega (botão "+" no Destino)
-   A distância considerada é sempre a do trecho mais longo (Origem → ponto mais
-   distante) — nunca a soma dos trechos. O ponto vencedor é escrito direto no
-   campo "Cidade Destino" já existente, então todo o resto do app (SPOT,
-   composição, DRE, histórico...) funciona sem nenhuma mudança.
+   Cada ponto fica sempre exatamente onde foi digitado — a ordem nunca muda e
+   nenhum campo é sobrescrito. A distância considerada para o cálculo é a do
+   trecho mais longo (Origem → ponto mais distante), decidida à parte e
+   guardada nos campos ocultos cepDestinoAtivo/cidadeDestinoAtivo, que passam
+   a alimentar o resto do app (SPOT, composição, DRE, histórico). Sem pontos
+   extras, esses campos ocultos ficam vazios e tudo usa "cepDestino"/
+   "cidadeDestino" normalmente, exatamente como sempre foi.
    ============================================================ */
 let pontosEntregaExtrasCount = 0;
 
-function adicionarPontoEntregaExtra(valorInicial) {
+function adicionarPontoEntregaExtra() {
   const idx = pontosEntregaExtrasCount++;
   const div = document.createElement("div");
-  div.className = "destino-extra-row";
+  div.className = "destino-extra-group";
   div.dataset.idx = idx;
   div.innerHTML = `
-    <div class="autocomplete-wrap">
-      <input type="text" autocomplete="off" placeholder="Digite a cidade do ponto de entrega adicional" value="${valorInicial ? valorInicial.replace(/"/g, "&quot;") : ""}">
-      <ul class="autocomplete-list" hidden></ul>
+    <div class="destino-extra-row">
+      <input type="text" id="destinoExtraCep${idx}" class="destino-extra-cep" placeholder="00000-000" maxlength="9" inputmode="numeric">
+      <div class="autocomplete-wrap">
+        <input type="text" id="destinoExtraCidade${idx}" autocomplete="off" placeholder="Digite a cidade do ponto de entrega adicional">
+        <ul class="autocomplete-list" hidden></ul>
+      </div>
+      <button type="button" class="btn-remove" title="Remover">&times;</button>
     </div>
-    <button type="button" class="btn-remove" title="Remover">&times;</button>
+    <div class="address-feedback" id="destinoExtraFeedback${idx}"></div>
   `;
   $("destinosExtrasContainer").appendChild(div);
 
-  const inputEl = div.querySelector("input");
+  const cepEl = div.querySelector(`#destinoExtraCep${idx}`);
+  const cidadeEl = div.querySelector(`#destinoExtraCidade${idx}`);
   const listEl = div.querySelector(".autocomplete-list");
-  configurarAutocompleteCidadeElementos(inputEl, listEl, () => tentarAutoCalculoKm());
+  mascararCEP(cepEl, cidadeEl.id, `destinoExtraFeedback${idx}`);
+  configurarAutocompleteCidadeElementos(cidadeEl, listEl, () => tentarAutoCalculoKm());
   div.querySelector(".btn-remove").addEventListener("click", () => {
     div.remove();
     recalcularSeJaTiverResultado();
@@ -637,39 +646,46 @@ function adicionarPontoEntregaExtra(valorInicial) {
 
 $("btnAddDestino").addEventListener("click", () => adicionarPontoEntregaExtra());
 
+/** Lê os pontos extras exatamente como estão na tela, sem alterar nada. */
 function listarPontosEntregaExtras() {
-  return [...document.querySelectorAll("#destinosExtrasContainer .destino-extra-row input")]
-    .map((el) => el.value.trim())
-    .filter(Boolean);
+  return [...document.querySelectorAll("#destinosExtrasContainer .destino-extra-group")]
+    .map((div) => ({
+      cep: $(`destinoExtraCep${div.dataset.idx}`).value.trim(),
+      cidade: $(`destinoExtraCidade${div.dataset.idx}`).value.trim(),
+    }))
+    .filter((p) => p.cidade);
 }
 
 function limparPontosEntregaExtras() {
   $("destinosExtrasContainer").innerHTML = "";
   pontosEntregaExtrasCount = 0;
+  $("cepDestinoAtivo").value = "";
+  $("cidadeDestinoAtivo").value = "";
+  $("destinoAtivoInfo").textContent = "";
 }
 
 /** Entre a origem e todos os candidatos a destino (o campo "Cidade Destino" + os pontos
- * extras), descobre qual está mais longe (linha reta, só para comparar — a distância real
- * de rota é calculada depois, normalmente, só para o vencedor). Se o vencedor não for o
- * campo "Cidade Destino" original, sobrescreve ele (e limpa o CEP, que não vale mais). */
-async function ajustarDestinoParaPontoMaisDistante(origemCoords) {
-  const extraInputs = [...document.querySelectorAll("#destinosExtrasContainer .destino-extra-row input")];
-  if (!extraInputs.length || !origemCoords) return;
+ * extras — nenhum deles é lido de forma destrutiva), descobre qual está mais longe (linha
+ * reta, só para comparar) e grava o vencedor nos campos ocultos cepDestinoAtivo/
+ * cidadeDestinoAtivo. Se o campo "Cidade Destino" original já é o mais distante (ou não há
+ * pontos extras), os campos ocultos ficam vazios e nada muda no restante do cálculo. */
+async function calcularDestinoAtivo(origemCoords) {
+  $("cepDestinoAtivo").value = "";
+  $("cidadeDestinoAtivo").value = "";
+  $("destinoAtivoInfo").textContent = "";
 
-  const candidatoPrincipal = $("cidadeDestino").value.trim();
-  const candidatos = [];
-  if (candidatoPrincipal) candidatos.push({ texto: candidatoPrincipal, input: null });
-  extraInputs.forEach((el) => {
-    const texto = el.value.trim();
-    if (texto) candidatos.push({ texto, input: el });
-  });
+  const extras = listarPontosEntregaExtras();
+  if (!extras.length || !origemCoords) return;
+
+  const principal = { cep: $("cepDestino").value.trim(), cidade: $("cidadeDestino").value.trim() };
+  const candidatos = [principal, ...extras].filter((c) => c.cidade);
   if (candidatos.length < 2) return;
 
   let vencedor = null;
   let melhorDist = -1;
   for (const cand of candidatos) {
-    const { cidade, uf } = separarCidadeUf(cand.texto);
-    const geo = await geocodificarCidade(cidade || cand.texto, uf);
+    const { cidade, uf } = separarCidadeUf(cand.cidade);
+    const geo = await geocodificarCidade(cidade || cand.cidade, uf);
     if (!geo) continue;
     const dist = haversineKm(origemCoords.lat, origemCoords.lon, geo.lat, geo.lon);
     if (dist > melhorDist) {
@@ -678,15 +694,44 @@ async function ajustarDestinoParaPontoMaisDistante(origemCoords) {
     }
   }
 
-  if (vencedor && vencedor.input) {
-    // Troca: o vencedor (que era um ponto extra) vira o "Cidade Destino" oficial; o que
-    // estava no campo principal antes volta como ponto extra, pra não perder o dado.
-    vencedor.input.value = candidatoPrincipal;
-    $("cepDestino").value = "";
-    $("cidadeDestino").value = vencedor.texto;
-    $("feedbackDestino").textContent = `✓ Múltiplos pontos de entrega — considerando o mais distante: ${vencedor.texto}`;
-    $("feedbackDestino").className = "address-feedback ok";
+  if (vencedor && vencedor.cidade !== principal.cidade) {
+    $("cepDestinoAtivo").value = vencedor.cep;
+    $("cidadeDestinoAtivo").value = vencedor.cidade;
+    $("destinoAtivoInfo").textContent = `✓ Múltiplos pontos de entrega — considerando o mais distante: ${vencedor.cidade}`;
   }
+}
+
+/** IDs do CEP/Cidade que devem alimentar o cálculo: os campos ocultos calculados quando um
+ * ponto extra é o mais distante, ou os campos normais "cepDestino"/"cidadeDestino" caso
+ * contrário (sem pontos extras, ou quando o campo principal já é o mais distante). */
+function idsDestinoAtivo() {
+  return $("cidadeDestinoAtivo").value.trim()
+    ? { cep: "cepDestinoAtivo", cidade: "cidadeDestinoAtivo" }
+    : { cep: "cepDestino", cidade: "cidadeDestino" };
+}
+
+/** Texto da cidade/CEP realmente usados no cálculo (ponto mais distante), para SPOT e para
+ * salvar a cotação — sem depender de resolverLocal já ter rodado. */
+function textoDestinoAtivo() {
+  return $("cidadeDestinoAtivo").value.trim() || $("cidadeDestino").value.trim();
+}
+function cepDestinoAtivoValor() {
+  return $("cidadeDestinoAtivo").value.trim() ? $("cepDestinoAtivo").value.trim() : $("cepDestino").value.trim();
+}
+
+/** Todos os pontos de entrega digitados (campo "Cidade Destino" + extras), exatamente como
+ * estão na tela. Usado só para montar a lista a salvar — nunca para alterar a tela. */
+function listarTodosPontosEntrega() {
+  const principal = { cep: $("cepDestino").value.trim(), cidade: $("cidadeDestino").value.trim() };
+  return [principal, ...listarPontosEntregaExtras()].filter((p) => p.cidade);
+}
+
+/** Pontos de entrega a salvar como "extras": todos os digitados MENOS o que foi usado no
+ * cálculo (esse já fica registrado em "destino") — assim nenhum ponto se perde e nenhum
+ * aparece duplicado. */
+function pontosEntregaExtrasParaSalvar() {
+  const ativo = textoDestinoAtivo();
+  return listarTodosPontosEntrega().filter((p) => p.cidade !== ativo);
 }
 
 let calculandoKm = false;
@@ -701,7 +746,7 @@ async function executarCalculoKm() {
   info.textContent = "";
   $("pedagioInfo").textContent = "";
   try {
-    let origem, destino;
+    let origem, destino, idsDestino;
     if (listarPontosEntregaExtras().length === 0) {
       // Caminho normal (sem pontos de entrega extras): resolve os dois lados em paralelo,
       // exatamente como sempre foi.
@@ -709,12 +754,15 @@ async function executarCalculoKm() {
         resolverLocal("cepOrigem", "cidadeOrigem", "feedbackOrigem"),
         resolverLocal("cepDestino", "cidadeDestino", "feedbackDestino"),
       ]);
+      idsDestino = { cep: "cepDestino", cidade: "cidadeDestino" };
     } else {
       // Com pontos extras, precisa da origem primeiro para comparar distâncias e decidir
-      // qual ponto de entrega é o mais distante antes de resolver o destino "de verdade".
+      // qual ponto de entrega é o mais distante — sem alterar nenhum campo visível — antes
+      // de resolver o destino "de verdade" (via os campos ocultos, se for o caso).
       origem = await resolverLocal("cepOrigem", "cidadeOrigem", "feedbackOrigem");
-      await ajustarDestinoParaPontoMaisDistante(origem.coords);
-      destino = await resolverLocal("cepDestino", "cidadeDestino", "feedbackDestino");
+      await calcularDestinoAtivo(origem.coords);
+      idsDestino = idsDestinoAtivo();
+      destino = await resolverLocal(idsDestino.cep, idsDestino.cidade, "feedbackDestino");
     }
     state.ufOrigem = origem.uf || "";
     state.ufDestino = destino.uf || "";
@@ -724,7 +772,7 @@ async function executarCalculoKm() {
     // precisa, pois usa o mesmo motor de rota e a mesma base de praças do site da QualP.
     if (qualpApiKey) {
       const origemTxt = textoLocalParaQualp("cepOrigem", "cidadeOrigem");
-      const destinoTxt = textoLocalParaQualp("cepDestino", "cidadeDestino");
+      const destinoTxt = textoLocalParaQualp(idsDestino.cep, idsDestino.cidade);
       if (origemTxt && destinoTxt) {
         const eixosAtual = parseInt($("qtdEixos").value, 10) || 2;
         const resultadoQualp = await calcularRotaQualp(origemTxt, destinoTxt, eixosAtual, qualpApiKey);
@@ -883,7 +931,7 @@ async function calcular() {
 
   // Custo SPOT: valor fixo negociado para este trecho + veículo, se houver cadastro — mostrado
   // à parte, sem misturar com o Custo por KM, para comparar os três cenários lado a lado.
-  const spot = buscarSpot($("cidadeOrigem").value, $("cidadeDestino").value, veiculo);
+  const spot = buscarSpot($("cidadeOrigem").value, textoDestinoAtivo(), veiculo);
   const custoSpot = spot ? spot.valor + servicoAdicionalValor : null;
   atualizarSpotInfoBox(spot, km);
 
@@ -1726,7 +1774,10 @@ function abrirDetalheCotacao(id) {
   partes.push(linhaCampo("CEP Destino", c.cepDestino || "—"));
   partes.push(linhaCampo(temPontosExtras ? "Cidade Destino (ponto mais distante)" : "Cidade Destino", c.destino || "—"));
   if (temPontosExtras) {
-    partes.push(linhaCampo("Outros pontos de entrega", c.pontosEntregaExtras.join(", ")));
+    const textoExtras = c.pontosEntregaExtras
+      .map((p) => (typeof p === "string" ? p : `${p.cidade}${p.cep ? " (CEP " + p.cep + ")" : ""}`))
+      .join(", ");
+    partes.push(linhaCampo("Outros pontos de entrega", textoExtras));
   }
   partes.push(linhaCampo("UF Origem → UF Destino", `${c.ufOrigem || "?"} → ${c.ufDestino || "?"}`));
 
@@ -2077,9 +2128,9 @@ function salvarCotacao() {
     // Origem / Destino
     cepOrigem: $("cepOrigem").value.trim(),
     origem: $("cidadeOrigem").value.trim(),
-    cepDestino: $("cepDestino").value.trim(),
-    destino: $("cidadeDestino").value.trim(),
-    pontosEntregaExtras: listarPontosEntregaExtras(),
+    cepDestino: cepDestinoAtivoValor(),
+    destino: textoDestinoAtivo(),
+    pontosEntregaExtras: pontosEntregaExtrasParaSalvar(),
     ufOrigem: state.ufOrigem || "",
     ufDestino: state.ufDestino || "",
 

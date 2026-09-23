@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 11:08";
+const BUILD_TIMESTAMP = "23/09/2026 11:18";
 
 /* ============================================================
    Persistência (localStorage) — troque por chamadas de API
@@ -2564,11 +2564,17 @@ function configurarAutocompleteCidadeElementos(input, list, aoSelecionar) {
   }
 
   async function buscar() {
-    const termo = input.value.trim();
-    if (termo.length < 2) {
+    const termoBruto = input.value.trim();
+    if (termoBruto.length < 2) {
       fechar();
       return;
     }
+    // Se o campo já tem "Cidade - UF" completo (preenchido pelo CEP, ou selecionado antes),
+    // busca só pelo nome da cidade — o "- UF" no final nunca bate com nada na lista de
+    // municípios (que guarda só o nome), e mostrava "Nenhuma cidade encontrada" à toa quando
+    // o campo só recebia foco de novo (ex.: Tab), sem o usuário ter digitado nada nele.
+    const { cidade, uf } = separarCidadeUf(termoBruto);
+    const termo = uf ? cidade : termoBruto;
     const municipios = await carregarMunicipios();
     const norm = normalizeStr(termo);
     const iniciaCom = [];
@@ -2584,8 +2590,9 @@ function configurarAutocompleteCidadeElementos(input, list, aoSelecionar) {
     iniciaCom.sort(porRelevancia);
     contem.sort(porRelevancia);
     const matches = iniciaCom.concat(contem).slice(0, 8);
-    // Só renderiza se o campo ainda tiver o mesmo termo (evita resposta atrasada sobrescrever)
-    if (normalizeStr(input.value.trim()) === norm) renderizar(matches, termo);
+    // Só renderiza se o campo ainda tiver o mesmo valor de quando a busca começou (evita
+    // resposta atrasada sobrescrever o que o usuário já digitou por cima)
+    if (input.value.trim() === termoBruto) renderizar(matches, termo);
   }
 
   let debounceTimer;

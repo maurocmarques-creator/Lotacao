@@ -6,6 +6,7 @@
   --amber-500: #d98c1a;
   --amber-100: #fbeed9;
   --green-600: #1f8a54;
+  --green-100: #e3f4ea;
   --gray-100: #f4f6f9;
   --gray-200: #e4e8ee;
   --gray-500: #6b7686;
@@ -231,9 +232,12 @@ input:focus, select:focus { outline: none; border-color: var(--blue-500); box-sh
 }
 .result-box.antt { background: var(--blue-100); }
 .result-box.aprox { background: var(--amber-100); }
+.result-box.spot { background: var(--green-100); }
 .result-label { font-size: 12.5px; font-weight: 600; color: var(--gray-500); }
 .result-value { font-size: 26px; font-weight: 700; color: var(--blue-900); }
 .result-box.aprox .result-value { color: #8a5a10; }
+.result-box.spot .result-value { color: var(--green-600); }
+.result-box.spot .result-formula { color: var(--green-600); font-weight: 600; }
 .result-formula { font-size: 11.5px; color: var(--gray-500); }
 .result-box.sale .result-value { font-size: 22px; color: var(--green-600); }
 
@@ -244,6 +248,7 @@ input:focus, select:focus { outline: none; border-color: var(--blue-500); box-sh
 }
 .composicao-col.antt { background: var(--blue-100); }
 .composicao-col.aprox { background: var(--amber-100); }
+.composicao-col.spot { background: var(--green-100); }
 table.composicao-table { width: 100%; border-collapse: collapse; }
 table.composicao-table td {
   padding: 7px 0;
@@ -261,6 +266,8 @@ table.composicao-table tr.total td {
   color: var(--blue-900);
 }
 .composicao-col.aprox tr.total td:last-child { color: #8a5a10; }
+.composicao-col.spot tr.total td:last-child { color: var(--green-600); }
+.composicao-col .sem-spot { color: var(--gray-500); font-size: 13px; padding: 10px 0; font-style: italic; }
 
 /* DRE Projetado */
 .dre-table tr.dre-subitem td:first-child { padding-left: 18px; color: var(--gray-500); font-weight: 500; }

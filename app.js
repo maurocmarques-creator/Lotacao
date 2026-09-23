@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 01:09";
+const BUILD_TIMESTAMP = "23/09/2026 10:09";
 
 /* ============================================================
    Persistência (localStorage) — troque por chamadas de API
@@ -142,6 +142,8 @@ const state = {
   pedagio: 0,
   custoAntt: 0,
   custoAprox: 0,
+  custoSpot: null,
+  spotDisponivel: false,
   servicoAdicionalDescricao: "",
   servicoAdicionalValor: 0,
   ufOrigem: "",
@@ -177,6 +179,7 @@ const state = {
   fonteIcms: "",
   compAntt: null,
   compMerc: null,
+  compSpot: null,
 };
 
 /* ============================================================
@@ -744,8 +747,8 @@ function obterAliquotaIcms(ufOrigem, ufDestino) {
    Cálculo principal: custo da operação + composição do frete
    (Frete Peso + Ad Valorem + Pedágio, com ICMS "por dentro")
    ------------------------------------------------------------ */
-/** Mostra um aviso destacado sobre a origem do Custo Aproximado (SPOT cadastrado x cálculo por
- * R$/km), para deixar claro para quem está cotando o quão confiável é o valor mostrado. */
+/** Mostra um aviso destacado sobre a disponibilidade de SPOT para este trecho, para deixar
+ * claro para quem está cotando se o quadro SPOT tem valor cadastrado ou não. */
 function atualizarSpotInfoBox(spot, km) {
   const box = $("spotInfoBox");
   box.hidden = false;
@@ -754,7 +757,7 @@ function atualizarSpotInfoBox(spot, km) {
     box.textContent = "✓ Valor SPOT cadastrado para este trecho e veículo — tabela com assertividade de 100% para trechos acima de 600 km.";
   } else {
     box.className = "spot-info-box warn";
-    box.textContent = "⚠ Sem valor SPOT cadastrado para este trecho — o Custo Aproximado foi calculado por R$/km, sem apresentação de valores pela controladoria de SPOT.";
+    box.textContent = "⚠ Sem valor SPOT cadastrado para este trecho — apenas o Custo ANTT e o Custo por KM estão disponíveis, sem apresentação de valores pela controladoria de SPOT.";
   }
 }
 
@@ -777,12 +780,14 @@ async function calcular() {
     ? ` + ${fmtBRL(servicoAdicionalValor)} (serviço adicional${servicoAdicionalDescricao ? ": " + servicoAdicionalDescricao : ""})`
     : "";
 
-  // Custo Aproximado: usa o valor SPOT cadastrado para este trecho + veículo, se existir — o
-  // SPOT é o preço fechado do veículo, sem pedágio (o pedágio já tem seu próprio campo/linha
-  // em todo o resto do app, então não entra aqui). Sem SPOT, cai no cálculo por R$/km, que aí
-  // sim soma o pedágio (não tem outro lugar pra vir esse custo nesse caso).
+  // Custo por KM: sempre calculado por R$/km × distância + pedágio, nunca usa o SPOT (que agora
+  // tem seu próprio quadro/coluna, ver custoSpot abaixo).
+  const custoAprox = linhaVeiculo.valorKm * km + pedagio + servicoAdicionalValor;
+
+  // Custo SPOT: valor fixo negociado para este trecho + veículo, se houver cadastro — mostrado
+  // à parte, sem misturar com o Custo por KM, para comparar os três cenários lado a lado.
   const spot = buscarSpot($("cidadeOrigem").value, $("cidadeDestino").value, veiculo);
-  const custoAprox = (spot ? spot.valor : linhaVeiculo.valorKm * km + pedagio) + servicoAdicionalValor;
+  const custoSpot = spot ? spot.valor + servicoAdicionalValor : null;
   atualizarSpotInfoBox(spot, km);
 
   let custoAntt = linhaAntt.ccd * km + linhaAntt.cc + pedagio + servicoAdicionalValor;
@@ -795,6 +800,8 @@ async function calcular() {
   state.pedagio = pedagio;
   state.custoAntt = custoAntt;
   state.custoAprox = custoAprox;
+  state.custoSpot = custoSpot;
+  state.spotDisponivel = !!spot;
   state.servicoAdicionalDescricao = servicoAdicionalDescricao;
   state.servicoAdicionalValor = servicoAdicionalValor;
   state.valorMercadoria = valorMercadoria;
@@ -808,7 +815,7 @@ async function calcular() {
   state.anttResolucao = null;
   state.veiculoTipo = veiculo;
   state.veiculoValorKm = linhaVeiculo.valorKm;
-  state.aproxFonte = spot ? "spot" : "km";
+  state.aproxFonte = "km";
   state.aproxSpotValor = spot ? spot.valor : null;
 
   $("resAntt").textContent = fmtBRL(custoAntt);
@@ -816,9 +823,16 @@ async function calcular() {
   $("resAnttFormula").textContent = formulaAnttCadastro;
 
   $("resAprox").textContent = fmtBRL(custoAprox);
-  $("resAproxFormula").textContent = spot
-    ? `${fmtBRL(spot.valor)} (SPOT cadastrado, sem pedágio)${servicoAdicionalTexto} — ${veiculo}`
-    : `(${fmtBRL(linhaVeiculo.valorKm)}/km × ${fmtNum(km)} km) + ${fmtBRL(pedagio)} (pedágio)${servicoAdicionalTexto} — ${veiculo}`;
+  $("resAproxFormula").textContent =
+    `(${fmtBRL(linhaVeiculo.valorKm)}/km × ${fmtNum(km)} km) + ${fmtBRL(pedagio)} (pedágio)${servicoAdicionalTexto} — ${veiculo}`;
+
+  if (spot) {
+    $("resSpot").textContent = fmtBRL(custoSpot);
+    $("resSpotFormula").textContent = `${fmtBRL(spot.valor)} (SPOT cadastrado, sem pedágio)${servicoAdicionalTexto} — ${veiculo}`;
+  } else {
+    $("resSpot").textContent = "—";
+    $("resSpotFormula").textContent = "Sem SPOT cadastrado para este trecho e veículo.";
+  }
 
   $("resultsCard").hidden = false;
   atualizarComposicao();
@@ -866,6 +880,23 @@ function preencherColunaComposicao(prefixo, linha) {
   $(`comp${prefixo}Total`).textContent = linha && linha.total !== null ? fmtBRL(linha.total) : "—";
 }
 
+/** Coluna SPOT da Composição: mostra a tabela normal quando há SPOT cadastrado, ou uma
+ * mensagem no lugar quando não há — evita comparar contra um R$ 0,00 enganoso. */
+function preencherColunaSpot(linha) {
+  const tbody = $("composicaoSpotBody");
+  if (!linha) {
+    tbody.innerHTML = `<tr><td colspan="2" class="sem-spot">Sem SPOT cadastrado para este trecho e veículo.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = `
+    <tr><td>Frete Peso</td><td id="compSpotFretePeso">${fmtBRL(linha.fretePeso)}</td></tr>
+    <tr><td>Ad Valorem</td><td id="compSpotAdvalorem">${fmtBRL(linha.advalorem)}</td></tr>
+    <tr><td>Pedágio</td><td id="compSpotPedagio">${fmtBRL(linha.pedagio)}</td></tr>
+    <tr><td>ICMS</td><td id="compSpotIcms">${linha.icms !== null ? fmtBRL(linha.icms) : "—"}</td></tr>
+    <tr class="total"><td>Total Venda</td><td id="compSpotTotal">${linha.total !== null ? fmtBRL(linha.total) : "—"}</td></tr>
+  `;
+}
+
 function atualizarComposicao() {
   if ($("resultsCard").hidden) return;
 
@@ -883,9 +914,11 @@ function atualizarComposicao() {
 
   const linhaAntt = calcularLinhaComposicao(state.custoAntt, mkp, advalorem, pedagio, aliquota);
   const linhaMerc = calcularLinhaComposicao(state.custoAprox, mkp, advalorem, pedagio, aliquota);
+  const linhaSpot = state.spotDisponivel ? calcularLinhaComposicao(state.custoSpot, mkp, advalorem, pedagio, aliquota) : null;
 
   preencherColunaComposicao("Antt", linhaAntt);
   preencherColunaComposicao("Merc", linhaMerc);
+  preencherColunaSpot(linhaSpot);
 
   state.mkp = mkp;
   state.pctCustoFixo = Number(vendaParams.pctCustoFixo) || 0;
@@ -898,6 +931,7 @@ function atualizarComposicao() {
   state.fonteIcms = fonte;
   state.compAntt = linhaAntt;
   state.compMerc = linhaMerc;
+  state.compSpot = linhaSpot;
 
   const partes = [`MKP: ${mkp ? fmtNum(mkp, 4) : "indefinido (percentuais somam 100% ou mais)"}`];
   if (aliquota !== null) {
@@ -1526,6 +1560,7 @@ function renderHistorico() {
       <td>${fmtBRL(c.valorMercadoria)}</td>
       <td>${fmtBRL(c.totalAntt)}</td>
       <td>${fmtBRL(c.totalMerc)}</td>
+      <td>${c.spotDisponivel ? fmtBRL(c.totalSpot) : "—"}</td>
       <td><button type="button" class="btn-remove" data-remove-cotacao="${c.id}" title="Remover">&times;</button></td>
     `;
     tbody.appendChild(tr);
@@ -1575,6 +1610,10 @@ function abrirDetalheCotacao(id) {
   // seria enganoso — em vez disso, avisamos que o dado não foi capturado na época.
   const legado = !("mkp" in c);
   const NAO_DISPONIVEL = "não disponível (cotação salva antes desta atualização)";
+  // Cotações salvas antes da separação do quadro SPOT (mesmo já com markup/ICMS) não têm
+  // "spotDisponivel" — trata como um caso à parte, diferente de "sem SPOT cadastrado".
+  const spotSuportado = "spotDisponivel" in c;
+  const NAO_DISPONIVEL_SPOT = "não disponível (cotação salva antes da separação do quadro SPOT)";
 
   const partes = [];
 
@@ -1600,12 +1639,6 @@ function abrirDetalheCotacao(id) {
   partes.push(linhaSecao("Operação"));
   partes.push(linhaCampo("Quantidade de Eixos", `${c.eixos ?? "—"} eixos${c.nomeVeiculoAntt ? " — " + c.nomeVeiculoAntt : ""}`));
   partes.push(linhaCampo("Tipo de Veículo (Mercado)", `${c.tipoVeiculoMercado || "—"}${c.veiculoValorKm ? ` (${fmtBRL(c.veiculoValorKm)}/km)` : ""}`));
-  if (!legado) {
-    partes.push(linhaCampo(
-      "Fonte do Custo Aproximado",
-      c.aproxFonte === "spot" ? `SPOT cadastrado (${fmtBRL(c.aproxSpotValor)})` : "Custo por KM (cadastro)"
-    ));
-  }
   partes.push(linhaCampo("Valor da Mercadoria", fmtBRL(c.valorMercadoria)));
 
   partes.push(linhaSecao("Custo ANTT (piso mínimo)"));
@@ -1623,7 +1656,13 @@ function abrirDetalheCotacao(id) {
     }
   }
   partes.push(linhaCampo("Custo ANTT (operação, sem markup)", fmtBRL(c.custoAntt)));
-  partes.push(linhaCampo("Custo Aproximado (operação, sem markup)", fmtBRL(c.custoAprox)));
+  partes.push(linhaCampo("Custo por KM (operação, sem markup)", fmtBRL(c.custoAprox)));
+  if (spotSuportado) {
+    partes.push(linhaCampo(
+      "Custo SPOT (operação, sem markup)",
+      c.spotDisponivel ? fmtBRL(c.custoSpot) : "Sem SPOT cadastrado para este trecho e veículo."
+    ));
+  }
   if (c.servicoAdicionalValor) {
     partes.push(linhaCampo("Serviço Adicional", `${fmtBRL(c.servicoAdicionalValor)}${c.servicoAdicionalDescricao ? " — " + c.servicoAdicionalDescricao : ""}`));
   }
@@ -1661,7 +1700,7 @@ function abrirDetalheCotacao(id) {
     partes.push(linhaCampo("Total Venda", fmtBRL(c.totalAntt)));
   }
 
-  partes.push(linhaSecao("Composição Final — Mercado"));
+  partes.push(linhaSecao("Composição Final — Mercado (Custo por KM)"));
   if (legado) {
     partes.push(linhaCampo("Frete Peso / Ad Valorem / ICMS", NAO_DISPONIVEL));
     partes.push(linhaCampo("Pedágio", fmtBRL(c.pedagio)));
@@ -1672,6 +1711,21 @@ function abrirDetalheCotacao(id) {
     partes.push(linhaCampo("Pedágio", fmtBRL(c.pedagio)));
     partes.push(linhaCampo("ICMS", fmtBRL(c.icmsMerc)));
     partes.push(linhaCampo("Total Venda", fmtBRL(c.totalMerc)));
+  }
+
+  partes.push(linhaSecao("Composição Final — SPOT"));
+  if (legado) {
+    partes.push(linhaCampo("Composição SPOT", NAO_DISPONIVEL));
+  } else if (!spotSuportado) {
+    partes.push(linhaCampo("Composição SPOT", NAO_DISPONIVEL_SPOT));
+  } else if (!c.spotDisponivel) {
+    partes.push(linhaCampo("Composição SPOT", "Sem SPOT cadastrado para este trecho e veículo."));
+  } else {
+    partes.push(linhaCampo("Frete Peso", fmtBRL(c.fretePesoSpot)));
+    partes.push(linhaCampo("Ad Valorem", fmtBRL(c.advalorem)));
+    partes.push(linhaCampo("Pedágio", fmtBRL(c.pedagio)));
+    partes.push(linhaCampo("ICMS", fmtBRL(c.icmsSpot)));
+    partes.push(linhaCampo("Total Venda", fmtBRL(c.totalSpot)));
   }
 
   $("detalheCotacaoTabela").innerHTML = partes.join("");
@@ -1766,6 +1820,8 @@ function abrirDreProjetado(id) {
     $("dreSubtitulo").textContent = `${c.origem || "?"} → ${c.destino || "?"} · DRE não disponível (cotação salva antes desta atualização — faltam percentuais e ICMS detalhados).`;
     $("dreTabelaAntt").innerHTML = "";
     $("dreTabelaMerc").innerHTML = "";
+    $("dreTabelaSpot").innerHTML = "";
+    $("dreSpotVazio").hidden = true;
     ativarAba("dre");
     return;
   }
@@ -1777,6 +1833,22 @@ function abrirDreProjetado(id) {
 
   preencherTabelaDre("dreTabelaAntt", dAntt);
   preencherTabelaDre("dreTabelaMerc", dMerc);
+
+  // SPOT: só existe DRE se a cotação já suportava o campo (pós-atualização) e tinha SPOT
+  // cadastrado no momento em que foi salva.
+  const spotSuportado = "spotDisponivel" in c;
+  if (spotSuportado && c.spotDisponivel) {
+    const dSpot = calcularDreLado(c.totalSpot, c.custoSpot, c.icmsSpot, c.pedagio, c.valorMercadoria, c.pctImpostos, c.pctComissao, c.pctCustoFixo, c.servicoAdicionalValor, c.servicoAdicionalDescricao);
+    preencherTabelaDre("dreTabelaSpot", dSpot);
+    $("dreTabelaSpot").hidden = false;
+    $("dreSpotVazio").hidden = true;
+  } else {
+    $("dreTabelaSpot").innerHTML = "";
+    $("dreSpotVazio").hidden = false;
+    $("dreSpotVazio").textContent = spotSuportado
+      ? "Sem SPOT cadastrado nesta cotação."
+      : "Não disponível (cotação salva antes da separação do quadro SPOT).";
+  }
 
   ativarAba("dre");
 }
@@ -1794,74 +1866,81 @@ async function exportarDreExcel() {
   const c = historicoCotacoes.find((item) => item.id === dreAtualCotacaoId);
   if (!c || !("mkp" in c)) return;
 
+  const temSpot = "spotDisponivel" in c && c.spotDisponivel;
+  const ultimaCol = temSpot ? "D" : "C";
+
   const workbook = new ExcelJS.Workbook();
   const ws = workbook.addWorksheet("DRE");
-  ws.columns = [{ width: 34 }, { width: 18 }, { width: 18 }];
+  ws.columns = temSpot ? [{ width: 34 }, { width: 18 }, { width: 18 }, { width: 18 }] : [{ width: 34 }, { width: 18 }, { width: 18 }];
 
   const brl = "R$ #,##0.00;[RED]-R$ #,##0.00";
   const pct = "0.00%";
 
-  function linha(rowNum, rotulo, valB, valC, opts = {}) {
+  function linha(rowNum, rotulo, valB, valC, valD, opts = {}) {
     const row = ws.getRow(rowNum);
     row.getCell(1).value = rotulo;
     row.getCell(2).value = valB;
     row.getCell(3).value = valC;
+    if (temSpot) row.getCell(4).value = valD;
     if (opts.negrito) row.font = { bold: true };
     if (opts.formato) {
       row.getCell(2).numFmt = opts.formato;
       row.getCell(3).numFmt = opts.formato;
+      if (temSpot) row.getCell(4).numFmt = opts.formato;
     }
     return row;
   }
 
-  ws.mergeCells("A1:C1");
+  ws.mergeCells(`A1:${ultimaCol}1`);
   ws.getCell("A1").value = `DRE Projetado — Cotação Nº ${c.numeroFormatado}`;
   ws.getCell("A1").font = { bold: true, size: 14 };
 
-  ws.mergeCells("A2:C2");
+  ws.mergeCells(`A2:${ultimaCol}2`);
   ws.getCell("A2").value = `${c.origem || "?"} → ${c.destino || "?"} · ${fmtDataHora(c.criadoEm)} · Vendedor: ${c.vendedor || "—"}`;
   ws.getCell("A2").font = { italic: true, color: { argb: "FF6B7686" } };
 
-  linha(4, "", "Baseado no Custo ANTT", "Baseado no Custo de Mercado", { negrito: true });
+  linha(4, "", "Baseado no Custo ANTT", "Baseado no Custo por KM", "Baseado no SPOT Cadastrado", { negrito: true });
 
-  linha(5, "Dados de entrada", null, null, { negrito: true });
+  linha(5, "Dados de entrada", null, null, null, { negrito: true });
   // Inputs (valores azuis = vêm direto da cotação salva, não são calculados aqui)
   const custoExtraDescricao = c.servicoAdicionalDescricao ? ` — ${c.servicoAdicionalDescricao}` : "";
-  linha(6, "Custo da Operação (com pedágio e custo extra)", c.custoAntt, c.custoAprox, { formato: brl });
-  linha(7, "Pedágio", c.pedagio, c.pedagio, { formato: brl });
-  linha(8, `Custo Extra${custoExtraDescricao}`, c.servicoAdicionalValor || 0, c.servicoAdicionalValor || 0, { formato: brl });
-  linha(9, "Valor da Mercadoria", c.valorMercadoria, c.valorMercadoria, { formato: brl });
-  linha(10, "ICMS (R$)", c.icmsAntt, c.icmsMerc, { formato: brl });
-  linha(11, "% Impostos Federais", (c.pctImpostos || 0) / 100, (c.pctImpostos || 0) / 100, { formato: pct });
-  linha(12, "% Comissão", (c.pctComissao || 0) / 100, (c.pctComissao || 0) / 100, { formato: pct });
-  linha(13, "% Custo Fixo", (c.pctCustoFixo || 0) / 100, (c.pctCustoFixo || 0) / 100, { formato: pct });
+  linha(6, "Custo da Operação (com pedágio e custo extra)", c.custoAntt, c.custoAprox, temSpot ? c.custoSpot : null, { formato: brl });
+  linha(7, "Pedágio", c.pedagio, c.pedagio, temSpot ? c.pedagio : null, { formato: brl });
+  linha(8, `Custo Extra${custoExtraDescricao}`, c.servicoAdicionalValor || 0, c.servicoAdicionalValor || 0, temSpot ? (c.servicoAdicionalValor || 0) : null, { formato: brl });
+  linha(9, "Valor da Mercadoria", c.valorMercadoria, c.valorMercadoria, temSpot ? c.valorMercadoria : null, { formato: brl });
+  linha(10, "ICMS (R$)", c.icmsAntt, c.icmsMerc, temSpot ? c.icmsSpot : null, { formato: brl });
+  linha(11, "% Impostos Federais", (c.pctImpostos || 0) / 100, (c.pctImpostos || 0) / 100, temSpot ? (c.pctImpostos || 0) / 100 : null, { formato: pct });
+  linha(12, "% Comissão", (c.pctComissao || 0) / 100, (c.pctComissao || 0) / 100, temSpot ? (c.pctComissao || 0) / 100 : null, { formato: pct });
+  linha(13, "% Custo Fixo", (c.pctCustoFixo || 0) / 100, (c.pctCustoFixo || 0) / 100, temSpot ? (c.pctCustoFixo || 0) / 100 : null, { formato: pct });
   [6, 7, 8, 9, 10, 11, 12, 13].forEach((r) => {
     ws.getCell(`B${r}`).font = { color: { argb: "FF1D5DB1" } };
     ws.getCell(`C${r}`).font = { color: { argb: "FF1D5DB1" } };
+    if (temSpot) ws.getCell(`D${r}`).font = { color: { argb: "FF1D5DB1" } };
   });
 
-  linha(15, "Cálculo do DRE", null, null, { negrito: true });
+  linha(15, "Cálculo do DRE", null, null, null, { negrito: true });
 
-  linha(16, "Frete Total", c.totalAntt, c.totalMerc, { formato: brl });
+  linha(16, "Frete Total", c.totalAntt, c.totalMerc, temSpot ? c.totalSpot : null, { formato: brl });
   ws.getCell("B16").font = { color: { argb: "FF1D5DB1" } };
   ws.getCell("C16").font = { color: { argb: "FF1D5DB1" } };
+  if (temSpot) ws.getCell("D16").font = { color: { argb: "FF1D5DB1" } };
 
-  linha(17, "(-) Impostos Federais", { formula: "-B16*B11" }, { formula: "-C16*C11" }, { formato: brl });
-  linha(18, "(-) ICMS", { formula: "-B10" }, { formula: "-C10" }, { formato: brl });
-  linha(19, "(=) ROB", { formula: "SUM(B16:B18)" }, { formula: "SUM(C16:C18)" }, { negrito: true, formato: brl });
+  linha(17, "(-) Impostos Federais", { formula: "-B16*B11" }, { formula: "-C16*C11" }, temSpot ? { formula: "-D16*D11" } : null, { formato: brl });
+  linha(18, "(-) ICMS", { formula: "-B10" }, { formula: "-C10" }, temSpot ? { formula: "-D10" } : null, { formato: brl });
+  linha(19, "(=) ROB", { formula: "SUM(B16:B18)" }, { formula: "SUM(C16:C18)" }, temSpot ? { formula: "SUM(D16:D18)" } : null, { negrito: true, formato: brl });
 
-  linha(20, "Custo da Contratação", { formula: "-(B6-B7-B8)" }, { formula: "-(C6-C7-C8)" }, { formato: brl });
-  linha(21, "Pedágio", { formula: "-B7" }, { formula: "-C7" }, { formato: brl });
-  linha(22, `Custo Extra${custoExtraDescricao}`, { formula: "-B8" }, { formula: "-C8" }, { formato: brl });
-  linha(23, "Custo com Seguro (0,04% da mercadoria)", { formula: "-B9*0.0004" }, { formula: "-C9*0.0004" }, { formato: brl });
-  linha(24, "Comissão", { formula: "-(B16-B10)*B12" }, { formula: "-(C16-C10)*C12" }, { formato: brl });
-  linha(25, "(=) Custo Variável", { formula: "SUM(B20:B24)" }, { formula: "SUM(C20:C24)" }, { negrito: true, formato: brl });
+  linha(20, "Custo da Contratação", { formula: "-(B6-B7-B8)" }, { formula: "-(C6-C7-C8)" }, temSpot ? { formula: "-(D6-D7-D8)" } : null, { formato: brl });
+  linha(21, "Pedágio", { formula: "-B7" }, { formula: "-C7" }, temSpot ? { formula: "-D7" } : null, { formato: brl });
+  linha(22, `Custo Extra${custoExtraDescricao}`, { formula: "-B8" }, { formula: "-C8" }, temSpot ? { formula: "-D8" } : null, { formato: brl });
+  linha(23, "Custo com Seguro (0,04% da mercadoria)", { formula: "-B9*0.0004" }, { formula: "-C9*0.0004" }, temSpot ? { formula: "-D9*0.0004" } : null, { formato: brl });
+  linha(24, "Comissão", { formula: "-(B16-B10)*B12" }, { formula: "-(C16-C10)*C12" }, temSpot ? { formula: "-(D16-D10)*D12" } : null, { formato: brl });
+  linha(25, "(=) Custo Variável", { formula: "SUM(B20:B24)" }, { formula: "SUM(C20:C24)" }, temSpot ? { formula: "SUM(D20:D24)" } : null, { negrito: true, formato: brl });
 
-  linha(26, "(=) Receita Operacional Líquida", { formula: "B19+B25" }, { formula: "C19+C25" }, { negrito: true, formato: brl });
+  linha(26, "(=) Receita Operacional Líquida", { formula: "B19+B25" }, { formula: "C19+C25" }, temSpot ? { formula: "D19+D25" } : null, { negrito: true, formato: brl });
 
-  linha(27, "(-) Custo Fixo", { formula: "-B16*B13" }, { formula: "-C16*C13" }, { formato: brl });
-  linha(28, "(=) Resultado", { formula: "B26+B27" }, { formula: "C26+C27" }, { negrito: true, formato: brl });
-  linha(29, "Resultado % do Faturamento", { formula: "B28/B16" }, { formula: "C28/C16" }, { formato: pct });
+  linha(27, "(-) Custo Fixo", { formula: "-B16*B13" }, { formula: "-C16*C13" }, temSpot ? { formula: "-D16*D13" } : null, { formato: brl });
+  linha(28, "(=) Resultado", { formula: "B26+B27" }, { formula: "C26+C27" }, temSpot ? { formula: "D26+D27" } : null, { negrito: true, formato: brl });
+  linha(29, "Resultado % do Faturamento", { formula: "B28/B16" }, { formula: "C28/C16" }, temSpot ? { formula: "D28/D16" } : null, { formato: pct });
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -1916,6 +1995,8 @@ function salvarCotacao() {
     veiculoValorKm: state.veiculoValorKm || 0,
     aproxFonte: state.aproxFonte || "km",
     aproxSpotValor: state.aproxSpotValor,
+    spotDisponivel: state.spotDisponivel || false,
+    custoSpot: state.custoSpot,
     valorMercadoria: state.valorMercadoria || 0,
     servicoAdicionalDescricao: state.servicoAdicionalDescricao || "",
     servicoAdicionalValor: state.servicoAdicionalValor || 0,
@@ -1950,6 +2031,9 @@ function salvarCotacao() {
     fretePesoMerc: state.compMerc ? state.compMerc.fretePeso : null,
     icmsMerc: state.compMerc ? state.compMerc.icms : null,
     totalMerc: state.compMerc ? state.compMerc.total : null,
+    fretePesoSpot: state.compSpot ? state.compSpot.fretePeso : null,
+    icmsSpot: state.compSpot ? state.compSpot.icms : null,
+    totalSpot: state.compSpot ? state.compSpot.total : null,
   };
 
   historicoCotacoes.push(registro);
@@ -1988,12 +2072,19 @@ function limparFormularioParaNovaCotacao() {
   state.pedagio = 0;
   state.custoAntt = 0;
   state.custoAprox = 0;
+  state.custoSpot = null;
+  state.spotDisponivel = false;
+  state.compSpot = null;
   state.servicoAdicionalDescricao = "";
   state.servicoAdicionalValor = 0;
   state.ufOrigem = "";
   state.ufDestino = "";
   state.valorMercadoria = 0;
   state.eixos = null;
+
+  $("resSpot").textContent = "R$ 0,00";
+  $("resSpotFormula").textContent = "";
+  preencherColunaSpot(null);
 
   $("resultsCard").hidden = true;
   $("spotInfoBox").hidden = true;
@@ -2006,13 +2097,14 @@ $("btnExportarHistorico").addEventListener("click", () => {
   const colunas = [
     "Nº Cotação", "Data/Hora", "Vendedor", "CEP Origem", "Origem", "CEP Destino", "Destino", "UF Origem", "UF Destino",
     "Km", "Km Bruto", "Fonte Km", "Ajuste Km %", "Pedágio",
-    "Eixos", "Veículo ANTT", "Veículo Mercado", "R$/km Mercado", "Fonte Custo Aprox.", "Valor SPOT", "Valor Mercadoria",
+    "Eixos", "Veículo ANTT", "Veículo Mercado", "R$/km Mercado", "SPOT Disponível", "Valor SPOT", "Valor Mercadoria",
     "Fonte ANTT", "CCD", "CC", "Frete-peso API", "Carga/Descarga API", "Resolução ANTT",
-    "Custo ANTT (operação)", "Custo Aprox. (operação)", "Serviço Adicional (descrição)", "Serviço Adicional (R$)",
+    "Custo ANTT (operação)", "Custo por KM (operação)", "Custo SPOT (operação)", "Serviço Adicional (descrição)", "Serviço Adicional (R$)",
     "% Custo Fixo", "% Impostos", "% Margem", "% Comissão", "MKP", "% Ad Valorem", "Ad Valorem (R$)",
     "Alíquota ICMS", "Fonte ICMS",
     "Frete Peso ANTT", "ICMS ANTT", "Total ANTT",
     "Frete Peso Mercado", "ICMS Mercado", "Total Mercado",
+    "Frete Peso SPOT", "ICMS SPOT", "Total SPOT",
   ];
   const linhas = [...historicoCotacoes]
     .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm))
@@ -2020,14 +2112,15 @@ $("btnExportarHistorico").addEventListener("click", () => {
       c.numeroFormatado, fmtDataHora(c.criadoEm), c.vendedor, c.cepOrigem, c.origem, c.cepDestino, c.destino, c.ufOrigem, c.ufDestino,
       c.km, c.kmBruto, NOMES_FONTE_KM[c.fonteKm] || c.fonteKm, c.ajusteKmPct, c.pedagio,
       c.eixos, c.nomeVeiculoAntt, c.tipoVeiculoMercado, c.veiculoValorKm,
-      c.aproxFonte === "spot" ? "SPOT" : "Custo por KM", c.aproxSpotValor, c.valorMercadoria,
+      c.spotDisponivel ? "Sim" : "Não", c.aproxSpotValor, c.valorMercadoria,
       c.anttFonte === "api" ? "API QualP" : "Cadastro manual", c.anttCcd, c.anttCc,
       c.anttFreightCost, c.anttLoadUnloadCost, c.anttResolucao,
-      c.custoAntt, c.custoAprox, c.servicoAdicionalDescricao, c.servicoAdicionalValor,
+      c.custoAntt, c.custoAprox, c.custoSpot, c.servicoAdicionalDescricao, c.servicoAdicionalValor,
       c.pctCustoFixo, c.pctImpostos, c.pctMargem, c.pctComissao, c.mkp, c.pctAdvalorem, c.advalorem,
       c.aliquotaIcms, c.fonteIcms,
       c.fretePesoAntt, c.icmsAntt, c.totalAntt,
       c.fretePesoMerc, c.icmsMerc, c.totalMerc,
+      c.fretePesoSpot, c.icmsSpot, c.totalSpot,
     ]);
   const csv = [colunas, ...linhas]
     .map((linha) => linha.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";"))

@@ -13,7 +13,7 @@
     <span class="brand-mark">🚛</span>
     <div>
       <h1>Calculadora de Frete</h1>
-      <p>Comparativo ANTT x Custo Aproximado</p>
+      <p>Comparativo ANTT x Custo por KM x SPOT</p>
       <p class="build-info">Atualizado em <span id="ultimaAtualizacao">—</span></p>
     </div>
   </div>
@@ -114,7 +114,7 @@
           </label>
         </div>
         <div class="campo-lado aprox">
-          <label>Tipo de veículo <span class="campo-lado-tag">usado no Custo Aproximado</span>
+          <label>Tipo de veículo <span class="campo-lado-tag">usado no Custo por KM e no Custo SPOT</span>
             <select id="tipoVeiculo"></select>
           </label>
         </div>
@@ -127,21 +127,26 @@
 
     <div class="card results" id="resultsCard" hidden>
       <h2>Resultado &mdash; Custo da Operação</h2>
-      <div class="grid-2">
+      <div class="grid-3">
         <div class="result-box antt">
           <span class="result-label">Custo ANTT (piso mínimo legal) <span id="resAnttVeiculo"></span></span>
           <span class="result-value" id="resAntt">R$ 0,00</span>
           <span class="result-formula" id="resAnttFormula"></span>
         </div>
         <div class="result-box aprox">
-          <span class="result-label">Custo Aproximado (mercado/veículo)</span>
+          <span class="result-label">Custo por KM (mercado/veículo)</span>
           <span class="result-value" id="resAprox">R$ 0,00</span>
           <span class="result-formula" id="resAproxFormula"></span>
+        </div>
+        <div class="result-box spot">
+          <span class="result-label">Custo SPOT (cadastrado)</span>
+          <span class="result-value" id="resSpot">R$ 0,00</span>
+          <span class="result-formula" id="resSpotFormula"></span>
         </div>
       </div>
 
       <h3>Serviço Adicional</h3>
-      <p class="hint">Custo extra (ex.: ajudante, seguro adicional, taxa de espera) somado ao valor da contratação nos dois cenários.</p>
+      <p class="hint">Custo extra (ex.: ajudante, seguro adicional, taxa de espera) somado ao valor da contratação nos três cenários.</p>
       <div class="grid-2">
         <label>Descrição do Serviço Adicional
           <input type="text" id="servicoAdicionalDescricao" placeholder="Ex.: Ajudante extra">
@@ -153,7 +158,7 @@
 
       <h3>Composição do Valor do Frete</h3>
       <p class="hint">Frete Peso = Custo &divide; MKP &middot; ICMS calculado "por dentro": Total = (Frete Peso + Ad Valorem + Pedágio) &divide; (1 &minus; alíquota)</p>
-      <div class="grid-2">
+      <div class="grid-3">
         <div class="composicao-col antt">
           <h4>Baseado no Custo ANTT</h4>
           <table class="composicao-table">
@@ -167,7 +172,7 @@
           </table>
         </div>
         <div class="composicao-col aprox">
-          <h4>Baseado no Custo de Mercado</h4>
+          <h4>Baseado no Custo por KM</h4>
           <table class="composicao-table">
             <tbody>
               <tr><td>Frete Peso</td><td id="compMercFretePeso">R$ 0,00</td></tr>
@@ -175,6 +180,18 @@
               <tr><td>Pedágio</td><td id="compMercPedagio">R$ 0,00</td></tr>
               <tr><td>ICMS</td><td id="compMercIcms">R$ 0,00</td></tr>
               <tr class="total"><td>Total Venda</td><td id="compMercTotal">R$ 0,00</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="composicao-col spot" id="composicaoSpotCol">
+          <h4>Baseado no SPOT Cadastrado</h4>
+          <table class="composicao-table">
+            <tbody id="composicaoSpotBody">
+              <tr><td>Frete Peso</td><td id="compSpotFretePeso">R$ 0,00</td></tr>
+              <tr><td>Ad Valorem</td><td id="compSpotAdvalorem">R$ 0,00</td></tr>
+              <tr><td>Pedágio</td><td id="compSpotPedagio">R$ 0,00</td></tr>
+              <tr><td>ICMS</td><td id="compSpotIcms">R$ 0,00</td></tr>
+              <tr class="total"><td>Total Venda</td><td id="compSpotTotal">R$ 0,00</td></tr>
             </tbody>
           </table>
         </div>
@@ -477,7 +494,7 @@
           <thead>
             <tr>
               <th>Nº Cotação</th><th>Data/Hora</th><th>Vendedor</th><th>Origem</th><th>Destino</th><th>Km</th>
-              <th>Pedágio</th><th>Valor Mercadoria</th><th>Total ANTT</th><th>Total Mercado</th><th></th>
+              <th>Pedágio</th><th>Valor Mercadoria</th><th>Total ANTT</th><th>Total por KM</th><th>Total SPOT</th><th></th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -493,14 +510,19 @@
     <div class="card">
       <h2>DRE Projetado <span id="dreNumeroCotacao"></span></h2>
       <p class="hint" id="dreSubtitulo"></p>
-      <div class="grid-2">
+      <div class="grid-3">
         <div class="composicao-col antt">
           <h4>Baseado no Custo ANTT</h4>
           <table class="composicao-table dre-table" id="dreTabelaAntt"></table>
         </div>
         <div class="composicao-col aprox">
-          <h4>Baseado no Custo de Mercado</h4>
+          <h4>Baseado no Custo por KM</h4>
           <table class="composicao-table dre-table" id="dreTabelaMerc"></table>
+        </div>
+        <div class="composicao-col spot">
+          <h4>Baseado no SPOT Cadastrado</h4>
+          <p class="sem-spot" id="dreSpotVazio" hidden>Sem SPOT cadastrado nesta cotação.</p>
+          <table class="composicao-table dre-table" id="dreTabelaSpot"></table>
         </div>
       </div>
       <div style="margin-top: 14px;">

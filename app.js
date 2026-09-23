@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 14:01";
+const BUILD_TIMESTAMP = "23/09/2026 15:38";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -614,6 +614,33 @@ async function calcularDistanciaRodoviaria(origem, destino) {
   return { km, duracaoSeg: tempoViagemEstimadoSeg(km), fonte: "estimativa", geometria: [[origem.lat, origem.lon], [destino.lat, destino.lon]] };
 }
 
+/** Com múltiplos pontos de entrega: soma o KM real trecho a trecho na ordem Origem → mais
+ * perto → ... → mais distante (pontosOrdenados já vem nessa ordem, ver calcularDestinoAtivo),
+ * em vez da distância direta Origem→mais distante — fica mais perto do trajeto real quando
+ * há entregas no meio do caminho. Concatena as geometrias de cada trecho (sem duplicar o
+ * ponto de junção) pro Mapa da Rota desenhar o trajeto completo, não só uma linha reta. */
+async function calcularKmMultiTrecho(origemCoords, pontosOrdenados) {
+  let kmTotal = 0;
+  let geometriaTotal = [];
+  const fontesUsadas = [];
+  let pontoAnterior = origemCoords;
+  for (const ponto of pontosOrdenados) {
+    const resultado = await calcularDistanciaRodoviaria(pontoAnterior, { lat: ponto.lat, lon: ponto.lon });
+    kmTotal += resultado.km;
+    fontesUsadas.push(resultado.fonte);
+    if (resultado.geometria && resultado.geometria.length) {
+      geometriaTotal = geometriaTotal.length ? geometriaTotal.concat(resultado.geometria.slice(1)) : resultado.geometria.slice();
+    }
+    pontoAnterior = { lat: ponto.lat, lon: ponto.lon };
+  }
+  const fonte = fontesUsadas.includes("estimativa")
+    ? "estimativa"
+    : fontesUsadas.every((f) => f === fontesUsadas[0])
+    ? fontesUsadas[0]
+    : "rota-caminhao";
+  return { km: kmTotal, fonte, geometria: geometriaTotal.length ? geometriaTotal : null };
+}
+
 // Guarda o último KM bruto (antes do ajuste) e sua fonte, para recalcular na hora
 // quando o usuário mexer no % de ajuste, sem precisar refazer a consulta de rota.
 let ultimoKmBruto = null;
@@ -694,6 +721,11 @@ function atualizarMapa() {
     .bindPopup(`<b>Origem</b><br>${ultimoOrigemMapa.label}`);
   pontosParaEnquadrar.push(origemLatLon);
 
+  // Com o trajeto real disponível (soma trecho a trecho, ver calcularKmMultiTrecho), a linha
+  // azul abaixo já passa pelas paradas — a linha tracejada de referência só faz sentido
+  // quando não há traçado real (cai numa linha reta Origem→Destino).
+  const temRotaReal = ultimaRotaGeometria && ultimaRotaGeometria.length > 1;
+
   const destinoNorm = normalizeStr(ultimoDestinoMapa.label);
   ultimosCandidatosDestinoGeo
     .filter((c) => normalizeStr(c.texto) !== destinoNorm)
@@ -702,8 +734,10 @@ function atualizarMapa() {
       L.marker(latlon, { icon: iconeMapaEmoji("🚩") })
         .addTo(mapaCamadaMarcadores)
         .bindPopup(`<b>Parada</b><br>${p.texto}`);
-      // Linha fina tracejada só de referência, ligando a origem à parada (não é a rota real).
-      L.polyline([origemLatLon, latlon], { color: "#8a94a6", weight: 2, dashArray: "4 6", opacity: 0.6 }).addTo(mapaCamadaMarcadores);
+      if (!temRotaReal) {
+        // Linha fina tracejada só de referência, ligando a origem à parada (não é a rota real).
+        L.polyline([origemLatLon, latlon], { color: "#8a94a6", weight: 2, dashArray: "4 6", opacity: 0.6 }).addTo(mapaCamadaMarcadores);
+      }
       pontosParaEnquadrar.push(latlon);
     });
 
@@ -713,9 +747,10 @@ function atualizarMapa() {
     .bindPopup(`<b>Destino</b><br>${ultimoDestinoMapa.label}`);
   pontosParaEnquadrar.push(destinoLatLon);
 
-  // Traçado real da rota (rodoviário), quando a fonte do KM trouxe a geometria (OSRM/ORS).
-  // Sem geometria disponível (ex.: fonte QualP), cai numa linha reta só de referência.
-  if (ultimaRotaGeometria && ultimaRotaGeometria.length > 1) {
+  // Traçado real da rota (rodoviário), quando a fonte do KM trouxe a geometria (OSRM/ORS) —
+  // com múltiplos pontos, já é o trajeto completo por todos eles. Sem geometria disponível
+  // (ex.: fonte QualP), cai numa linha reta só de referência.
+  if (temRotaReal) {
     L.polyline(ultimaRotaGeometria, { color: "#1d5db1", weight: 4, opacity: 0.85 }).addTo(mapaCamadaMarcadores);
     pontosParaEnquadrar.push(...ultimaRotaGeometria);
   } else {
@@ -799,10 +834,12 @@ function limparPontosEntregaExtras() {
 let ultimosCandidatosDestinoGeo = [];
 
 /** Entre a origem e todos os candidatos a destino (o campo "Cidade Destino" + os pontos
- * extras — nenhum deles é lido de forma destrutiva), descobre qual está mais longe (linha
- * reta, só para comparar) e grava o vencedor nos campos ocultos cepDestinoAtivo/
- * cidadeDestinoAtivo. Se o campo "Cidade Destino" original já é o mais distante (ou não há
- * pontos extras), os campos ocultos ficam vazios e nada muda no restante do cálculo. */
+ * extras — nenhum deles é lido de forma destrutiva), geocodifica cada um, ordena do mais
+ * perto pro mais longe (linha reta até a Origem, só pra ordenar) e grava o mais distante nos
+ * campos ocultos cepDestinoAtivo/cidadeDestinoAtivo — ele continua sendo o "destino ativo"
+ * (SPOT, ANTT, histórico). Se o campo "Cidade Destino" original já é o mais distante (ou não
+ * há pontos extras), os campos ocultos ficam vazios e nada muda no restante do cálculo.
+ * Devolve a lista ordenada (com lat/lon), usada pra somar o KM trecho a trecho. */
 async function calcularDestinoAtivo(origemCoords) {
   $("cepDestinoAtivo").value = "";
   $("cidadeDestinoAtivo").value = "";
@@ -810,31 +847,31 @@ async function calcularDestinoAtivo(origemCoords) {
   ultimosCandidatosDestinoGeo = [];
 
   const extras = listarPontosEntregaExtras();
-  if (!extras.length || !origemCoords) return;
+  if (!extras.length || !origemCoords) return [];
 
   const principal = { cep: $("cepDestino").value.trim(), cidade: $("cidadeDestino").value.trim() };
   const candidatos = [principal, ...extras].filter((c) => c.cidade);
-  if (candidatos.length < 2) return;
+  if (candidatos.length < 2) return [];
 
-  let vencedor = null;
-  let melhorDist = -1;
+  const geocodificados = [];
   for (const cand of candidatos) {
     const { cidade, uf } = separarCidadeUf(cand.cidade);
     const geo = await geocodificarCidade(cidade || cand.cidade, uf);
     if (!geo) continue;
     ultimosCandidatosDestinoGeo.push({ texto: cand.cidade, lat: geo.lat, lon: geo.lon });
     const dist = haversineKm(origemCoords.lat, origemCoords.lon, geo.lat, geo.lon);
-    if (dist > melhorDist) {
-      melhorDist = dist;
-      vencedor = cand;
-    }
+    geocodificados.push({ ...cand, lat: geo.lat, lon: geo.lon, dist });
   }
+  geocodificados.sort((a, b) => a.dist - b.dist);
 
+  const vencedor = geocodificados[geocodificados.length - 1];
   if (vencedor && vencedor.cidade !== principal.cidade) {
     $("cepDestinoAtivo").value = vencedor.cep;
     $("cidadeDestinoAtivo").value = vencedor.cidade;
     $("destinoAtivoInfo").textContent = `✓ Múltiplos pontos de entrega — considerando o mais distante: ${vencedor.cidade}`;
   }
+
+  return geocodificados;
 }
 
 /** IDs do CEP/Cidade que devem alimentar o cálculo: os campos ocultos calculados quando um
@@ -882,7 +919,7 @@ async function executarCalculoKm() {
   info.textContent = "";
   $("pedagioInfo").textContent = "";
   try {
-    let origem, destino, idsDestino;
+    let origem, destino, idsDestino, pontosOrdenados;
     if (listarPontosEntregaExtras().length === 0) {
       // Caminho normal (sem pontos de entrega extras): resolve os dois lados em paralelo,
       // exatamente como sempre foi.
@@ -891,15 +928,17 @@ async function executarCalculoKm() {
         resolverLocal("cepDestino", "cidadeDestino", "feedbackDestino"),
       ]);
       idsDestino = { cep: "cepDestino", cidade: "cidadeDestino" };
+      pontosOrdenados = [];
     } else {
-      // Com pontos extras, precisa da origem primeiro para comparar distâncias e decidir
-      // qual ponto de entrega é o mais distante — sem alterar nenhum campo visível — antes
-      // de resolver o destino "de verdade" (via os campos ocultos, se for o caso).
+      // Com pontos extras, precisa da origem primeiro pra ordenar os pontos do mais perto pro
+      // mais distante (sem alterar nenhum campo visível) — o mais distante continua sendo o
+      // "destino ativo" (via os campos ocultos); o KM soma o trajeto real por todos eles.
       origem = await resolverLocal("cepOrigem", "cidadeOrigem", "feedbackOrigem");
-      await calcularDestinoAtivo(origem.coords);
+      pontosOrdenados = await calcularDestinoAtivo(origem.coords);
       idsDestino = idsDestinoAtivo();
       destino = await resolverLocal(idsDestino.cep, idsDestino.cidade, "feedbackDestino");
     }
+    const multiTrecho = pontosOrdenados.length > 1 && origem.coords;
     state.ufOrigem = origem.uf || "";
     state.ufDestino = destino.uf || "";
     state.origemLat = origem.coords ? origem.coords.lat : null;
@@ -911,7 +950,8 @@ async function executarCalculoKm() {
     ultimoOrigemMapa = origem.coords ? { lat: origem.coords.lat, lon: origem.coords.lon, label: origem.cidadeResolvida || $("cidadeOrigem").value.trim() } : null;
     ultimoDestinoMapa = destino.coords ? { lat: destino.coords.lat, lon: destino.coords.lon, label: destino.cidadeResolvida || destinoLabelMapa } : null;
 
-    // 1) API QualP (se configurada): KM + duração + pedágio numa só consulta — a fonte mais
+    // 1) API QualP (se configurada): pedágio (sempre do trecho direto Origem→destino ativo,
+    // mesmo com múltiplos pontos) e, sem múltiplos pontos, também o KM — a fonte mais
     // precisa, pois usa o mesmo motor de rota e a mesma base de praças do site da QualP.
     if (qualpApiKey) {
       const origemTxt = textoLocalParaQualp("cepOrigem", "cidadeOrigem");
@@ -920,21 +960,35 @@ async function executarCalculoKm() {
         const eixosAtual = parseInt($("qtdEixos").value, 10) || 2;
         const resultadoQualp = await calcularRotaQualp(origemTxt, destinoTxt, eixosAtual, qualpApiKey);
         if (resultadoQualp) {
-          ultimoKmBruto = resultadoQualp.km;
-          ultimaFonteKm = "qualp";
-          // A API QualP não devolve a geometria da rota — o mapa cai pra linha reta nesse caso.
-          ultimaRotaGeometria = null;
-          aplicarAjusteEExibir();
-
           $("pedagio").value = resultadoQualp.pedagio.toFixed(2);
           $("pedagioInfo").textContent = resultadoQualp.pracas.length
             ? `${resultadoQualp.pracas.length} praça(s) via QualP: ${resultadoQualp.pracas.map((p) => `${p.nome}-${p.uf} (${fmtBRL(p.valor)})`).join(", ")}`
             : "Nenhuma praça de pedágio detectada no trajeto (via QualP).";
-          calcular();
-          return;
+
+          if (!multiTrecho) {
+            ultimoKmBruto = resultadoQualp.km;
+            ultimaFonteKm = "qualp";
+            // A API QualP não devolve a geometria da rota — o mapa cai pra linha reta nesse caso.
+            ultimaRotaGeometria = null;
+            aplicarAjusteEExibir();
+            calcular();
+            return;
+          }
+          // Com múltiplos pontos, o pedágio acima já é o do trecho direto — o KM vem do
+          // somatório trecho a trecho logo abaixo, então ainda não retorna.
+        } else {
+          info.textContent = "Chave QualP configurada, mas a consulta falhou — usando OpenRouteService/OSRM.";
         }
-        info.textContent = "Chave QualP configurada, mas a consulta falhou — usando OpenRouteService/OSRM.";
       }
+    }
+
+    if (multiTrecho) {
+      const resultado = await calcularKmMultiTrecho(origem.coords, pontosOrdenados);
+      ultimoKmBruto = resultado.km;
+      ultimaFonteKm = resultado.fonte;
+      ultimaRotaGeometria = resultado.geometria;
+      aplicarAjusteEExibir();
+      return;
     }
 
     if (!origem.coords || !destino.coords) {

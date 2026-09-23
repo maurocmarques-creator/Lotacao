@@ -98,7 +98,7 @@
 
         <div id="destinosExtrasContainer"></div>
         <button type="button" id="btnAddDestino" class="btn-secondary destino-extra-add">+ Adicionar ponto de entrega</button>
-        <small class="hint">Com mais de um ponto de entrega, cada um fica registrado na ordem em que foi digitado — a distância considerada para o cálculo é sempre a do trecho mais longo (Origem &rarr; ponto mais distante), sem alterar o que você digitou em cada campo.</small>
+        <small class="hint">Com mais de um ponto de entrega, cada um fica registrado na ordem em que foi digitado, sem alterar o que você digitou em cada campo — mas o KM soma o trajeto real Origem &rarr; ponto mais perto &rarr; ... &rarr; ponto mais distante (nessa ordem de distância), não a linha reta direto até o mais distante.</small>
       </div>
 
     </div>
@@ -251,8 +251,9 @@
       <h3>Mapa da Rota</h3>
       <p class="hint">
         🟢 Origem &middot; 🚩 Pontos de entrega adicionais &middot; 🏁 Destino (ponto mais distante).
-        A linha entre Origem e Destino segue a estrada de verdade (mesma rota usada no cálculo
-        do KM). As linhas até paradas adicionais são retas, só de referência.
+        Com um destino só, a linha segue a estrada de verdade (mesma rota usada no cálculo do
+        KM). Com mais de um ponto de entrega, a linha segue o trajeto real por todos eles, na
+        ordem Origem &rarr; mais perto &rarr; ... &rarr; mais distante (mesma soma usada no KM).
       </p>
       <div id="mapaRota"></div>
     </div>

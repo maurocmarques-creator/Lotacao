@@ -240,6 +240,18 @@ input:focus, select:focus { outline: none; border-color: var(--blue-500); box-sh
 .result-box.spot .result-formula { color: var(--green-600); font-weight: 600; }
 .result-formula { font-size: 11.5px; color: var(--gray-500); }
 .result-box.sale .result-value { font-size: 22px; color: var(--green-600); }
+.result-warning {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #8a5a00;
+  background: #fff4e5;
+  border: 1px solid #e8a33d;
+  border-radius: 6px;
+}
+.result-warning[hidden] { display: none; }
 
 .composicao-col {
   border-radius: var(--radius);

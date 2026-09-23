@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 10:34";
+const BUILD_TIMESTAMP = "23/09/2026 10:38";
 
 /* ============================================================
    Persistência (localStorage) — troque por chamadas de API
@@ -931,7 +931,10 @@ async function calcular() {
 
   // Custo SPOT: valor fixo negociado para este trecho + veículo, se houver cadastro — mostrado
   // à parte, sem misturar com o Custo por KM, para comparar os três cenários lado a lado.
-  const spot = buscarSpot($("cidadeOrigem").value, textoDestinoAtivo(), veiculo);
+  // SPOT é sempre Origem → primeira entrega (o campo "Cidade Destino" original) — é o preço
+  // negociado para esse trecho específico, nunca para o ponto mais distante quando há
+  // entregas adicionais (aí o aviso abaixo pede pra somar o custo delas à parte).
+  const spot = buscarSpot($("cidadeOrigem").value, $("cidadeDestino").value, veiculo);
   const custoSpot = spot ? spot.valor + servicoAdicionalValor : null;
   atualizarSpotInfoBox(spot, km);
 
@@ -974,9 +977,18 @@ async function calcular() {
   if (spot) {
     $("resSpot").textContent = fmtBRL(custoSpot);
     $("resSpotFormula").textContent = `${fmtBRL(spot.valor)} (SPOT cadastrado, sem pedágio)${servicoAdicionalTexto} — ${veiculo}`;
+    // SPOT cobre só Origem → primeira entrega — com pontos adicionais cadastrados, o valor
+    // não inclui o custo deles, então precisa avisar pra somar à parte.
+    const temEntregasAdicionais = listarPontosEntregaExtras().length > 0;
+    $("resSpotAviso").hidden = !temEntregasAdicionais;
+    $("resSpotAviso").textContent = temEntregasAdicionais
+      ? `⚠ Este SPOT cobre só Origem → ${$("cidadeDestino").value.trim()} (primeira entrega). Inclua o custo das entregas adicionais em "Serviço Adicional".`
+      : "";
   } else {
     $("resSpot").textContent = "—";
     $("resSpotFormula").textContent = "Sem SPOT cadastrado para este trecho e veículo.";
+    $("resSpotAviso").hidden = true;
+    $("resSpotAviso").textContent = "";
   }
 
   $("resultsCard").hidden = false;
@@ -1814,6 +1826,12 @@ function abrirDetalheCotacao(id) {
       "Custo SPOT (operação, sem markup)",
       c.spotDisponivel ? fmtBRL(c.custoSpot) : "Sem SPOT cadastrado para este trecho e veículo."
     ));
+    if (c.spotDisponivel && c.pontosEntregaExtras && c.pontosEntregaExtras.length) {
+      partes.push(linhaCampo(
+        "Aviso SPOT",
+        `⚠ Cobre só Origem → ${c.destinoPrimeiraEntrega || c.destino || "primeira entrega"}. Não inclui o custo das entregas adicionais.`
+      ));
+    }
   }
   if (c.servicoAdicionalValor) {
     partes.push(linhaCampo("Serviço Adicional", `${fmtBRL(c.servicoAdicionalValor)}${c.servicoAdicionalDescricao ? " — " + c.servicoAdicionalDescricao : ""}`));
@@ -2130,6 +2148,10 @@ function salvarCotacao() {
     origem: $("cidadeOrigem").value.trim(),
     cepDestino: cepDestinoAtivoValor(),
     destino: textoDestinoAtivo(),
+    // "Primeira entrega": o campo "Cidade Destino" tal como digitado, sem depender do ponto
+    // mais distante — é o par usado pelo SPOT (origem → primeira entrega, sempre).
+    cepDestinoPrimeiraEntrega: $("cepDestino").value.trim(),
+    destinoPrimeiraEntrega: $("cidadeDestino").value.trim(),
     pontosEntregaExtras: pontosEntregaExtrasParaSalvar(),
     ufOrigem: state.ufOrigem || "",
     ufDestino: state.ufDestino || "",
@@ -2238,6 +2260,8 @@ function limparFormularioParaNovaCotacao() {
 
   $("resSpot").textContent = "R$ 0,00";
   $("resSpotFormula").textContent = "";
+  $("resSpotAviso").hidden = true;
+  $("resSpotAviso").textContent = "";
   preencherColunaSpot(null);
 
   $("resultsCard").hidden = true;

@@ -1,0 +1,2215 @@
+"use strict";
+
+/* ============================================================
+   Persistência (localStorage) — troque por chamadas de API
+   quando este app virar SaaS.
+   ============================================================ */
+const STORAGE_KEYS = {
+  antt: "cf_antt_table_v1",
+  veiculos: "cf_vehicle_rates_v1",
+  venda: "cf_sale_params_v1",
+  icms: "cf_icms_table_v1",
+  ajusteKm: "cf_ajuste_km_v1",
+  orsApiKey: "cf_ors_api_key_v1",
+  qualpApiKey: "cf_qualp_api_key_v1",
+  anttConfig: "cf_antt_config_v1",
+  vendedores: "cf_vendedores_v1",
+  spot: "cf_spot_table_v1",
+  contadorCotacoes: "cf_contador_cotacoes_v1",
+  historico: "cf_historico_cotacoes_v1",
+};
+
+const NOMES_PADRAO_EIXOS = {
+  2: "Toco",
+  3: "Truck",
+  4: "Bitruck/Carreta 4 Eixos",
+  5: "Carreta 5 Eixos",
+  6: "Carreta LS",
+  7: "Bitrem",
+  9: "Rodotrem",
+};
+
+const DEFAULT_ANTT = [
+  { eixos: 2, ccd: 0, cc: 0, nome: NOMES_PADRAO_EIXOS[2] },
+  { eixos: 3, ccd: 0, cc: 0, nome: NOMES_PADRAO_EIXOS[3] },
+  { eixos: 4, ccd: 0, cc: 0, nome: NOMES_PADRAO_EIXOS[4] },
+  { eixos: 5, ccd: 0, cc: 0, nome: NOMES_PADRAO_EIXOS[5] },
+  { eixos: 6, ccd: 0, cc: 0, nome: NOMES_PADRAO_EIXOS[6] },
+  { eixos: 7, ccd: 0, cc: 0, nome: NOMES_PADRAO_EIXOS[7] },
+  { eixos: 9, ccd: 0, cc: 0, nome: NOMES_PADRAO_EIXOS[9] },
+];
+
+const DEFAULT_VEICULOS = [
+  { tipo: "Fiorino", valorKm: 2.80 },
+  { tipo: "Van", valorKm: 3.60 },
+  { tipo: "3/4", valorKm: 5.50 },
+  { tipo: "Truck", valorKm: 6.50 },
+  { tipo: "Carreta", valorKm: 8.50 },
+];
+
+const DEFAULT_VENDA = { pctCustoFixo: 5, pctImpostos: 8, pctMargem: 11, pctComissao: 3, pctAdvalorem: 0 };
+// Tabela oficial de aliquotas de ICMS interestadual/intraestadual (indice_icms), fornecida
+// pela PortoEx. Cobre as 27x27 combinacoes de UF (inclui operacoes dentro do mesmo estado).
+// Editavel na aba ICMS; qualquer alteracao la sobrescreve os valores desta tabela.
+const DEFAULT_ICMS = [{ufOrigem:"AC",ufDestino:"AC",aliquota:17.0},{ufOrigem:"AC",ufDestino:"AL",aliquota:12.0},{ufOrigem:"AC",ufDestino:"AM",aliquota:12.0},{ufOrigem:"AC",ufDestino:"AP",aliquota:12.0},{ufOrigem:"AC",ufDestino:"BA",aliquota:12.0},{ufOrigem:"AC",ufDestino:"CE",aliquota:12.0},{ufOrigem:"AC",ufDestino:"DF",aliquota:12.0},{ufOrigem:"AC",ufDestino:"ES",aliquota:12.0},{ufOrigem:"AC",ufDestino:"GO",aliquota:12.0},{ufOrigem:"AC",ufDestino:"MA",aliquota:12.0},{ufOrigem:"AC",ufDestino:"MG",aliquota:12.0},{ufOrigem:"AC",ufDestino:"MS",aliquota:12.0},{ufOrigem:"AC",ufDestino:"MT",aliquota:12.0},{ufOrigem:"AC",ufDestino:"PA",aliquota:12.0},{ufOrigem:"AC",ufDestino:"PB",aliquota:12.0},{ufOrigem:"AC",ufDestino:"PE",aliquota:12.0},{ufOrigem:"AC",ufDestino:"PI",aliquota:12.0},{ufOrigem:"AC",ufDestino:"PR",aliquota:12.0},{ufOrigem:"AC",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"AC",ufDestino:"RN",aliquota:12.0},{ufOrigem:"AC",ufDestino:"RO",aliquota:12.0},{ufOrigem:"AC",ufDestino:"RR",aliquota:12.0},{ufOrigem:"AC",ufDestino:"RS",aliquota:12.0},{ufOrigem:"AC",ufDestino:"SC",aliquota:12.0},{ufOrigem:"AC",ufDestino:"SE",aliquota:12.0},{ufOrigem:"AC",ufDestino:"SP",aliquota:12.0},{ufOrigem:"AC",ufDestino:"TO",aliquota:12.0},{ufOrigem:"AL",ufDestino:"AC",aliquota:12.0},{ufOrigem:"AL",ufDestino:"AL",aliquota:17.0},{ufOrigem:"AL",ufDestino:"AM",aliquota:12.0},{ufOrigem:"AL",ufDestino:"AP",aliquota:12.0},{ufOrigem:"AL",ufDestino:"BA",aliquota:12.0},{ufOrigem:"AL",ufDestino:"CE",aliquota:12.0},{ufOrigem:"AL",ufDestino:"DF",aliquota:12.0},{ufOrigem:"AL",ufDestino:"ES",aliquota:12.0},{ufOrigem:"AL",ufDestino:"GO",aliquota:12.0},{ufOrigem:"AL",ufDestino:"MA",aliquota:12.0},{ufOrigem:"AL",ufDestino:"MG",aliquota:12.0},{ufOrigem:"AL",ufDestino:"MS",aliquota:12.0},{ufOrigem:"AL",ufDestino:"MT",aliquota:12.0},{ufOrigem:"AL",ufDestino:"PA",aliquota:12.0},{ufOrigem:"AL",ufDestino:"PB",aliquota:12.0},{ufOrigem:"AL",ufDestino:"PE",aliquota:12.0},{ufOrigem:"AL",ufDestino:"PI",aliquota:12.0},{ufOrigem:"AL",ufDestino:"PR",aliquota:12.0},{ufOrigem:"AL",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"AL",ufDestino:"RN",aliquota:12.0},{ufOrigem:"AL",ufDestino:"RO",aliquota:12.0},{ufOrigem:"AL",ufDestino:"RR",aliquota:12.0},{ufOrigem:"AL",ufDestino:"RS",aliquota:12.0},{ufOrigem:"AL",ufDestino:"SC",aliquota:12.0},{ufOrigem:"AL",ufDestino:"SE",aliquota:12.0},{ufOrigem:"AL",ufDestino:"SP",aliquota:12.0},{ufOrigem:"AL",ufDestino:"TO",aliquota:12.0},{ufOrigem:"AM",ufDestino:"AC",aliquota:12.0},{ufOrigem:"AM",ufDestino:"AL",aliquota:12.0},{ufOrigem:"AM",ufDestino:"AM",aliquota:17.0},{ufOrigem:"AM",ufDestino:"AP",aliquota:12.0},{ufOrigem:"AM",ufDestino:"BA",aliquota:12.0},{ufOrigem:"AM",ufDestino:"CE",aliquota:12.0},{ufOrigem:"AM",ufDestino:"DF",aliquota:12.0},{ufOrigem:"AM",ufDestino:"ES",aliquota:12.0},{ufOrigem:"AM",ufDestino:"GO",aliquota:12.0},{ufOrigem:"AM",ufDestino:"MA",aliquota:12.0},{ufOrigem:"AM",ufDestino:"MG",aliquota:12.0},{ufOrigem:"AM",ufDestino:"MS",aliquota:12.0},{ufOrigem:"AM",ufDestino:"MT",aliquota:12.0},{ufOrigem:"AM",ufDestino:"PA",aliquota:12.0},{ufOrigem:"AM",ufDestino:"PB",aliquota:12.0},{ufOrigem:"AM",ufDestino:"PE",aliquota:12.0},{ufOrigem:"AM",ufDestino:"PI",aliquota:12.0},{ufOrigem:"AM",ufDestino:"PR",aliquota:12.0},{ufOrigem:"AM",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"AM",ufDestino:"RN",aliquota:12.0},{ufOrigem:"AM",ufDestino:"RO",aliquota:12.0},{ufOrigem:"AM",ufDestino:"RR",aliquota:12.0},{ufOrigem:"AM",ufDestino:"RS",aliquota:12.0},{ufOrigem:"AM",ufDestino:"SC",aliquota:12.0},{ufOrigem:"AM",ufDestino:"SE",aliquota:12.0},{ufOrigem:"AM",ufDestino:"SP",aliquota:12.0},{ufOrigem:"AM",ufDestino:"TO",aliquota:12.0},{ufOrigem:"AP",ufDestino:"AC",aliquota:12.0},{ufOrigem:"AP",ufDestino:"AL",aliquota:12.0},{ufOrigem:"AP",ufDestino:"AM",aliquota:12.0},{ufOrigem:"AP",ufDestino:"AP",aliquota:17.0},{ufOrigem:"AP",ufDestino:"BA",aliquota:12.0},{ufOrigem:"AP",ufDestino:"CE",aliquota:12.0},{ufOrigem:"AP",ufDestino:"DF",aliquota:12.0},{ufOrigem:"AP",ufDestino:"ES",aliquota:12.0},{ufOrigem:"AP",ufDestino:"GO",aliquota:12.0},{ufOrigem:"AP",ufDestino:"MA",aliquota:12.0},{ufOrigem:"AP",ufDestino:"MG",aliquota:12.0},{ufOrigem:"AP",ufDestino:"MS",aliquota:12.0},{ufOrigem:"AP",ufDestino:"MT",aliquota:12.0},{ufOrigem:"AP",ufDestino:"PA",aliquota:12.0},{ufOrigem:"AP",ufDestino:"PB",aliquota:12.0},{ufOrigem:"AP",ufDestino:"PE",aliquota:12.0},{ufOrigem:"AP",ufDestino:"PI",aliquota:12.0},{ufOrigem:"AP",ufDestino:"PR",aliquota:12.0},{ufOrigem:"AP",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"AP",ufDestino:"RN",aliquota:12.0},{ufOrigem:"AP",ufDestino:"RO",aliquota:12.0},{ufOrigem:"AP",ufDestino:"RR",aliquota:12.0},{ufOrigem:"AP",ufDestino:"RS",aliquota:12.0},{ufOrigem:"AP",ufDestino:"SC",aliquota:12.0},{ufOrigem:"AP",ufDestino:"SE",aliquota:12.0},{ufOrigem:"AP",ufDestino:"SP",aliquota:12.0},{ufOrigem:"AP",ufDestino:"TO",aliquota:12.0},{ufOrigem:"BA",ufDestino:"AC",aliquota:12.0},{ufOrigem:"BA",ufDestino:"AL",aliquota:12.0},{ufOrigem:"BA",ufDestino:"AM",aliquota:12.0},{ufOrigem:"BA",ufDestino:"AP",aliquota:12.0},{ufOrigem:"BA",ufDestino:"BA",aliquota:17.0},{ufOrigem:"BA",ufDestino:"CE",aliquota:12.0},{ufOrigem:"BA",ufDestino:"DF",aliquota:12.0},{ufOrigem:"BA",ufDestino:"ES",aliquota:12.0},{ufOrigem:"BA",ufDestino:"GO",aliquota:12.0},{ufOrigem:"BA",ufDestino:"MA",aliquota:12.0},{ufOrigem:"BA",ufDestino:"MG",aliquota:12.0},{ufOrigem:"BA",ufDestino:"MS",aliquota:12.0},{ufOrigem:"BA",ufDestino:"MT",aliquota:12.0},{ufOrigem:"BA",ufDestino:"PA",aliquota:12.0},{ufOrigem:"BA",ufDestino:"PB",aliquota:12.0},{ufOrigem:"BA",ufDestino:"PE",aliquota:12.0},{ufOrigem:"BA",ufDestino:"PI",aliquota:12.0},{ufOrigem:"BA",ufDestino:"PR",aliquota:12.0},{ufOrigem:"BA",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"BA",ufDestino:"RN",aliquota:12.0},{ufOrigem:"BA",ufDestino:"RO",aliquota:12.0},{ufOrigem:"BA",ufDestino:"RR",aliquota:12.0},{ufOrigem:"BA",ufDestino:"RS",aliquota:12.0},{ufOrigem:"BA",ufDestino:"SC",aliquota:12.0},{ufOrigem:"BA",ufDestino:"SE",aliquota:12.0},{ufOrigem:"BA",ufDestino:"SP",aliquota:12.0},{ufOrigem:"BA",ufDestino:"TO",aliquota:12.0},{ufOrigem:"CE",ufDestino:"AC",aliquota:12.0},{ufOrigem:"CE",ufDestino:"AL",aliquota:12.0},{ufOrigem:"CE",ufDestino:"AM",aliquota:12.0},{ufOrigem:"CE",ufDestino:"AP",aliquota:12.0},{ufOrigem:"CE",ufDestino:"BA",aliquota:12.0},{ufOrigem:"CE",ufDestino:"CE",aliquota:17.0},{ufOrigem:"CE",ufDestino:"DF",aliquota:12.0},{ufOrigem:"CE",ufDestino:"ES",aliquota:12.0},{ufOrigem:"CE",ufDestino:"GO",aliquota:12.0},{ufOrigem:"CE",ufDestino:"MA",aliquota:12.0},{ufOrigem:"CE",ufDestino:"MG",aliquota:12.0},{ufOrigem:"CE",ufDestino:"MS",aliquota:12.0},{ufOrigem:"CE",ufDestino:"MT",aliquota:12.0},{ufOrigem:"CE",ufDestino:"PA",aliquota:12.0},{ufOrigem:"CE",ufDestino:"PB",aliquota:12.0},{ufOrigem:"CE",ufDestino:"PE",aliquota:12.0},{ufOrigem:"CE",ufDestino:"PI",aliquota:12.0},{ufOrigem:"CE",ufDestino:"PR",aliquota:12.0},{ufOrigem:"CE",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"CE",ufDestino:"RN",aliquota:12.0},{ufOrigem:"CE",ufDestino:"RO",aliquota:12.0},{ufOrigem:"CE",ufDestino:"RR",aliquota:12.0},{ufOrigem:"CE",ufDestino:"RS",aliquota:12.0},{ufOrigem:"CE",ufDestino:"SC",aliquota:12.0},{ufOrigem:"CE",ufDestino:"SE",aliquota:12.0},{ufOrigem:"CE",ufDestino:"SP",aliquota:12.0},{ufOrigem:"CE",ufDestino:"TO",aliquota:12.0},{ufOrigem:"DF",ufDestino:"AC",aliquota:12.0},{ufOrigem:"DF",ufDestino:"AL",aliquota:12.0},{ufOrigem:"DF",ufDestino:"AM",aliquota:12.0},{ufOrigem:"DF",ufDestino:"AP",aliquota:12.0},{ufOrigem:"DF",ufDestino:"BA",aliquota:12.0},{ufOrigem:"DF",ufDestino:"CE",aliquota:12.0},{ufOrigem:"DF",ufDestino:"DF",aliquota:17.0},{ufOrigem:"DF",ufDestino:"ES",aliquota:12.0},{ufOrigem:"DF",ufDestino:"GO",aliquota:12.0},{ufOrigem:"DF",ufDestino:"MA",aliquota:12.0},{ufOrigem:"DF",ufDestino:"MG",aliquota:12.0},{ufOrigem:"DF",ufDestino:"MS",aliquota:12.0},{ufOrigem:"DF",ufDestino:"MT",aliquota:12.0},{ufOrigem:"DF",ufDestino:"PA",aliquota:12.0},{ufOrigem:"DF",ufDestino:"PB",aliquota:12.0},{ufOrigem:"DF",ufDestino:"PE",aliquota:12.0},{ufOrigem:"DF",ufDestino:"PI",aliquota:12.0},{ufOrigem:"DF",ufDestino:"PR",aliquota:12.0},{ufOrigem:"DF",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"DF",ufDestino:"RN",aliquota:12.0},{ufOrigem:"DF",ufDestino:"RO",aliquota:12.0},{ufOrigem:"DF",ufDestino:"RR",aliquota:12.0},{ufOrigem:"DF",ufDestino:"RS",aliquota:12.0},{ufOrigem:"DF",ufDestino:"SC",aliquota:12.0},{ufOrigem:"DF",ufDestino:"SE",aliquota:12.0},{ufOrigem:"DF",ufDestino:"SP",aliquota:12.0},{ufOrigem:"DF",ufDestino:"TO",aliquota:12.0},{ufOrigem:"ES",ufDestino:"AC",aliquota:12.0},{ufOrigem:"ES",ufDestino:"AL",aliquota:12.0},{ufOrigem:"ES",ufDestino:"AM",aliquota:12.0},{ufOrigem:"ES",ufDestino:"AP",aliquota:12.0},{ufOrigem:"ES",ufDestino:"BA",aliquota:12.0},{ufOrigem:"ES",ufDestino:"CE",aliquota:12.0},{ufOrigem:"ES",ufDestino:"DF",aliquota:12.0},{ufOrigem:"ES",ufDestino:"ES",aliquota:17.0},{ufOrigem:"ES",ufDestino:"GO",aliquota:12.0},{ufOrigem:"ES",ufDestino:"MA",aliquota:12.0},{ufOrigem:"ES",ufDestino:"MG",aliquota:12.0},{ufOrigem:"ES",ufDestino:"MS",aliquota:12.0},{ufOrigem:"ES",ufDestino:"MT",aliquota:12.0},{ufOrigem:"ES",ufDestino:"PA",aliquota:12.0},{ufOrigem:"ES",ufDestino:"PB",aliquota:12.0},{ufOrigem:"ES",ufDestino:"PE",aliquota:12.0},{ufOrigem:"ES",ufDestino:"PI",aliquota:12.0},{ufOrigem:"ES",ufDestino:"PR",aliquota:12.0},{ufOrigem:"ES",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"ES",ufDestino:"RN",aliquota:12.0},{ufOrigem:"ES",ufDestino:"RO",aliquota:12.0},{ufOrigem:"ES",ufDestino:"RR",aliquota:12.0},{ufOrigem:"ES",ufDestino:"RS",aliquota:12.0},{ufOrigem:"ES",ufDestino:"SC",aliquota:12.0},{ufOrigem:"ES",ufDestino:"SE",aliquota:12.0},{ufOrigem:"ES",ufDestino:"SP",aliquota:12.0},{ufOrigem:"ES",ufDestino:"TO",aliquota:12.0},{ufOrigem:"GO",ufDestino:"AC",aliquota:12.0},{ufOrigem:"GO",ufDestino:"AL",aliquota:12.0},{ufOrigem:"GO",ufDestino:"AM",aliquota:12.0},{ufOrigem:"GO",ufDestino:"AP",aliquota:12.0},{ufOrigem:"GO",ufDestino:"BA",aliquota:12.0},{ufOrigem:"GO",ufDestino:"CE",aliquota:12.0},{ufOrigem:"GO",ufDestino:"DF",aliquota:12.0},{ufOrigem:"GO",ufDestino:"ES",aliquota:12.0},{ufOrigem:"GO",ufDestino:"GO",aliquota:12.0},{ufOrigem:"GO",ufDestino:"MA",aliquota:12.0},{ufOrigem:"GO",ufDestino:"MG",aliquota:12.0},{ufOrigem:"GO",ufDestino:"MS",aliquota:12.0},{ufOrigem:"GO",ufDestino:"MT",aliquota:12.0},{ufOrigem:"GO",ufDestino:"PA",aliquota:12.0},{ufOrigem:"GO",ufDestino:"PB",aliquota:12.0},{ufOrigem:"GO",ufDestino:"PE",aliquota:12.0},{ufOrigem:"GO",ufDestino:"PI",aliquota:12.0},{ufOrigem:"GO",ufDestino:"PR",aliquota:12.0},{ufOrigem:"GO",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"GO",ufDestino:"RN",aliquota:12.0},{ufOrigem:"GO",ufDestino:"RO",aliquota:12.0},{ufOrigem:"GO",ufDestino:"RR",aliquota:12.0},{ufOrigem:"GO",ufDestino:"RS",aliquota:12.0},{ufOrigem:"GO",ufDestino:"SC",aliquota:12.0},{ufOrigem:"GO",ufDestino:"SE",aliquota:12.0},{ufOrigem:"GO",ufDestino:"SP",aliquota:12.0},{ufOrigem:"GO",ufDestino:"TO",aliquota:12.0},{ufOrigem:"MA",ufDestino:"AC",aliquota:12.0},{ufOrigem:"MA",ufDestino:"AL",aliquota:12.0},{ufOrigem:"MA",ufDestino:"AM",aliquota:12.0},{ufOrigem:"MA",ufDestino:"AP",aliquota:12.0},{ufOrigem:"MA",ufDestino:"BA",aliquota:12.0},{ufOrigem:"MA",ufDestino:"CE",aliquota:12.0},{ufOrigem:"MA",ufDestino:"DF",aliquota:12.0},{ufOrigem:"MA",ufDestino:"ES",aliquota:12.0},{ufOrigem:"MA",ufDestino:"GO",aliquota:12.0},{ufOrigem:"MA",ufDestino:"MA",aliquota:18.0},{ufOrigem:"MA",ufDestino:"MG",aliquota:12.0},{ufOrigem:"MA",ufDestino:"MS",aliquota:12.0},{ufOrigem:"MA",ufDestino:"MT",aliquota:12.0},{ufOrigem:"MA",ufDestino:"PA",aliquota:12.0},{ufOrigem:"MA",ufDestino:"PB",aliquota:12.0},{ufOrigem:"MA",ufDestino:"PE",aliquota:12.0},{ufOrigem:"MA",ufDestino:"PI",aliquota:12.0},{ufOrigem:"MA",ufDestino:"PR",aliquota:12.0},{ufOrigem:"MA",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"MA",ufDestino:"RN",aliquota:12.0},{ufOrigem:"MA",ufDestino:"RO",aliquota:12.0},{ufOrigem:"MA",ufDestino:"RR",aliquota:12.0},{ufOrigem:"MA",ufDestino:"RS",aliquota:12.0},{ufOrigem:"MA",ufDestino:"SC",aliquota:12.0},{ufOrigem:"MA",ufDestino:"SE",aliquota:12.0},{ufOrigem:"MA",ufDestino:"SP",aliquota:12.0},{ufOrigem:"MA",ufDestino:"TO",aliquota:12.0},{ufOrigem:"MG",ufDestino:"AC",aliquota:7.0},{ufOrigem:"MG",ufDestino:"AL",aliquota:7.0},{ufOrigem:"MG",ufDestino:"AM",aliquota:7.0},{ufOrigem:"MG",ufDestino:"AP",aliquota:7.0},{ufOrigem:"MG",ufDestino:"BA",aliquota:7.0},{ufOrigem:"MG",ufDestino:"CE",aliquota:7.0},{ufOrigem:"MG",ufDestino:"DF",aliquota:7.0},{ufOrigem:"MG",ufDestino:"ES",aliquota:7.0},{ufOrigem:"MG",ufDestino:"GO",aliquota:7.0},{ufOrigem:"MG",ufDestino:"MA",aliquota:7.0},{ufOrigem:"MG",ufDestino:"MG",aliquota:18.0},{ufOrigem:"MG",ufDestino:"MS",aliquota:7.0},{ufOrigem:"MG",ufDestino:"MT",aliquota:7.0},{ufOrigem:"MG",ufDestino:"PA",aliquota:7.0},{ufOrigem:"MG",ufDestino:"PB",aliquota:7.0},{ufOrigem:"MG",ufDestino:"PE",aliquota:7.0},{ufOrigem:"MG",ufDestino:"PI",aliquota:7.0},{ufOrigem:"MG",ufDestino:"PR",aliquota:12.0},{ufOrigem:"MG",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"MG",ufDestino:"RN",aliquota:7.0},{ufOrigem:"MG",ufDestino:"RO",aliquota:7.0},{ufOrigem:"MG",ufDestino:"RR",aliquota:7.0},{ufOrigem:"MG",ufDestino:"RS",aliquota:12.0},{ufOrigem:"MG",ufDestino:"SC",aliquota:12.0},{ufOrigem:"MG",ufDestino:"SE",aliquota:7.0},{ufOrigem:"MG",ufDestino:"SP",aliquota:12.0},{ufOrigem:"MG",ufDestino:"TO",aliquota:7.0},{ufOrigem:"MS",ufDestino:"AC",aliquota:12.0},{ufOrigem:"MS",ufDestino:"AL",aliquota:12.0},{ufOrigem:"MS",ufDestino:"AM",aliquota:12.0},{ufOrigem:"MS",ufDestino:"AP",aliquota:12.0},{ufOrigem:"MS",ufDestino:"BA",aliquota:12.0},{ufOrigem:"MS",ufDestino:"CE",aliquota:12.0},{ufOrigem:"MS",ufDestino:"DF",aliquota:12.0},{ufOrigem:"MS",ufDestino:"ES",aliquota:12.0},{ufOrigem:"MS",ufDestino:"GO",aliquota:12.0},{ufOrigem:"MS",ufDestino:"MA",aliquota:12.0},{ufOrigem:"MS",ufDestino:"MG",aliquota:12.0},{ufOrigem:"MS",ufDestino:"MS",aliquota:17.0},{ufOrigem:"MS",ufDestino:"MT",aliquota:12.0},{ufOrigem:"MS",ufDestino:"PA",aliquota:12.0},{ufOrigem:"MS",ufDestino:"PB",aliquota:12.0},{ufOrigem:"MS",ufDestino:"PE",aliquota:12.0},{ufOrigem:"MS",ufDestino:"PI",aliquota:12.0},{ufOrigem:"MS",ufDestino:"PR",aliquota:12.0},{ufOrigem:"MS",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"MS",ufDestino:"RN",aliquota:12.0},{ufOrigem:"MS",ufDestino:"RO",aliquota:12.0},{ufOrigem:"MS",ufDestino:"RR",aliquota:12.0},{ufOrigem:"MS",ufDestino:"RS",aliquota:12.0},{ufOrigem:"MS",ufDestino:"SC",aliquota:12.0},{ufOrigem:"MS",ufDestino:"SE",aliquota:12.0},{ufOrigem:"MS",ufDestino:"SP",aliquota:12.0},{ufOrigem:"MS",ufDestino:"TO",aliquota:12.0},{ufOrigem:"MT",ufDestino:"AC",aliquota:12.0},{ufOrigem:"MT",ufDestino:"AL",aliquota:12.0},{ufOrigem:"MT",ufDestino:"AM",aliquota:12.0},{ufOrigem:"MT",ufDestino:"AP",aliquota:12.0},{ufOrigem:"MT",ufDestino:"BA",aliquota:12.0},{ufOrigem:"MT",ufDestino:"CE",aliquota:12.0},{ufOrigem:"MT",ufDestino:"DF",aliquota:12.0},{ufOrigem:"MT",ufDestino:"ES",aliquota:12.0},{ufOrigem:"MT",ufDestino:"GO",aliquota:12.0},{ufOrigem:"MT",ufDestino:"MA",aliquota:12.0},{ufOrigem:"MT",ufDestino:"MG",aliquota:12.0},{ufOrigem:"MT",ufDestino:"MS",aliquota:12.0},{ufOrigem:"MT",ufDestino:"MT",aliquota:17.0},{ufOrigem:"MT",ufDestino:"PA",aliquota:12.0},{ufOrigem:"MT",ufDestino:"PB",aliquota:12.0},{ufOrigem:"MT",ufDestino:"PE",aliquota:12.0},{ufOrigem:"MT",ufDestino:"PI",aliquota:12.0},{ufOrigem:"MT",ufDestino:"PR",aliquota:12.0},{ufOrigem:"MT",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"MT",ufDestino:"RN",aliquota:12.0},{ufOrigem:"MT",ufDestino:"RO",aliquota:12.0},{ufOrigem:"MT",ufDestino:"RR",aliquota:12.0},{ufOrigem:"MT",ufDestino:"RS",aliquota:12.0},{ufOrigem:"MT",ufDestino:"SC",aliquota:12.0},{ufOrigem:"MT",ufDestino:"SE",aliquota:12.0},{ufOrigem:"MT",ufDestino:"SP",aliquota:12.0},{ufOrigem:"MT",ufDestino:"TO",aliquota:12.0},{ufOrigem:"PA",ufDestino:"AC",aliquota:12.0},{ufOrigem:"PA",ufDestino:"AL",aliquota:12.0},{ufOrigem:"PA",ufDestino:"AM",aliquota:12.0},{ufOrigem:"PA",ufDestino:"AP",aliquota:12.0},{ufOrigem:"PA",ufDestino:"BA",aliquota:12.0},{ufOrigem:"PA",ufDestino:"CE",aliquota:12.0},{ufOrigem:"PA",ufDestino:"DF",aliquota:12.0},{ufOrigem:"PA",ufDestino:"ES",aliquota:12.0},{ufOrigem:"PA",ufDestino:"GO",aliquota:12.0},{ufOrigem:"PA",ufDestino:"MA",aliquota:12.0},{ufOrigem:"PA",ufDestino:"MG",aliquota:12.0},{ufOrigem:"PA",ufDestino:"MS",aliquota:12.0},{ufOrigem:"PA",ufDestino:"MT",aliquota:12.0},{ufOrigem:"PA",ufDestino:"PA",aliquota:17.0},{ufOrigem:"PA",ufDestino:"PB",aliquota:12.0},{ufOrigem:"PA",ufDestino:"PE",aliquota:12.0},{ufOrigem:"PA",ufDestino:"PI",aliquota:12.0},{ufOrigem:"PA",ufDestino:"PR",aliquota:12.0},{ufOrigem:"PA",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"PA",ufDestino:"RN",aliquota:12.0},{ufOrigem:"PA",ufDestino:"RO",aliquota:12.0},{ufOrigem:"PA",ufDestino:"RR",aliquota:12.0},{ufOrigem:"PA",ufDestino:"RS",aliquota:12.0},{ufOrigem:"PA",ufDestino:"SC",aliquota:12.0},{ufOrigem:"PA",ufDestino:"SE",aliquota:12.0},{ufOrigem:"PA",ufDestino:"SP",aliquota:12.0},{ufOrigem:"PA",ufDestino:"TO",aliquota:12.0},{ufOrigem:"PB",ufDestino:"AC",aliquota:12.0},{ufOrigem:"PB",ufDestino:"AL",aliquota:12.0},{ufOrigem:"PB",ufDestino:"AM",aliquota:12.0},{ufOrigem:"PB",ufDestino:"AP",aliquota:12.0},{ufOrigem:"PB",ufDestino:"BA",aliquota:12.0},{ufOrigem:"PB",ufDestino:"CE",aliquota:12.0},{ufOrigem:"PB",ufDestino:"DF",aliquota:12.0},{ufOrigem:"PB",ufDestino:"ES",aliquota:12.0},{ufOrigem:"PB",ufDestino:"GO",aliquota:12.0},{ufOrigem:"PB",ufDestino:"MA",aliquota:12.0},{ufOrigem:"PB",ufDestino:"MG",aliquota:12.0},{ufOrigem:"PB",ufDestino:"MS",aliquota:12.0},{ufOrigem:"PB",ufDestino:"MT",aliquota:12.0},{ufOrigem:"PB",ufDestino:"PA",aliquota:12.0},{ufOrigem:"PB",ufDestino:"PB",aliquota:18.0},{ufOrigem:"PB",ufDestino:"PE",aliquota:12.0},{ufOrigem:"PB",ufDestino:"PI",aliquota:12.0},{ufOrigem:"PB",ufDestino:"PR",aliquota:12.0},{ufOrigem:"PB",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"PB",ufDestino:"RN",aliquota:12.0},{ufOrigem:"PB",ufDestino:"RO",aliquota:12.0},{ufOrigem:"PB",ufDestino:"RR",aliquota:12.0},{ufOrigem:"PB",ufDestino:"RS",aliquota:12.0},{ufOrigem:"PB",ufDestino:"SC",aliquota:12.0},{ufOrigem:"PB",ufDestino:"SE",aliquota:12.0},{ufOrigem:"PB",ufDestino:"SP",aliquota:12.0},{ufOrigem:"PB",ufDestino:"TO",aliquota:12.0},{ufOrigem:"PE",ufDestino:"AC",aliquota:12.0},{ufOrigem:"PE",ufDestino:"AL",aliquota:12.0},{ufOrigem:"PE",ufDestino:"AM",aliquota:12.0},{ufOrigem:"PE",ufDestino:"AP",aliquota:12.0},{ufOrigem:"PE",ufDestino:"BA",aliquota:12.0},{ufOrigem:"PE",ufDestino:"CE",aliquota:12.0},{ufOrigem:"PE",ufDestino:"DF",aliquota:12.0},{ufOrigem:"PE",ufDestino:"ES",aliquota:12.0},{ufOrigem:"PE",ufDestino:"GO",aliquota:12.0},{ufOrigem:"PE",ufDestino:"MA",aliquota:12.0},{ufOrigem:"PE",ufDestino:"MG",aliquota:12.0},{ufOrigem:"PE",ufDestino:"MS",aliquota:12.0},{ufOrigem:"PE",ufDestino:"MT",aliquota:12.0},{ufOrigem:"PE",ufDestino:"PA",aliquota:12.0},{ufOrigem:"PE",ufDestino:"PB",aliquota:12.0},{ufOrigem:"PE",ufDestino:"PE",aliquota:18.0},{ufOrigem:"PE",ufDestino:"PI",aliquota:12.0},{ufOrigem:"PE",ufDestino:"PR",aliquota:12.0},{ufOrigem:"PE",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"PE",ufDestino:"RN",aliquota:12.0},{ufOrigem:"PE",ufDestino:"RO",aliquota:12.0},{ufOrigem:"PE",ufDestino:"RR",aliquota:12.0},{ufOrigem:"PE",ufDestino:"RS",aliquota:12.0},{ufOrigem:"PE",ufDestino:"SC",aliquota:12.0},{ufOrigem:"PE",ufDestino:"SE",aliquota:12.0},{ufOrigem:"PE",ufDestino:"SP",aliquota:12.0},{ufOrigem:"PE",ufDestino:"TO",aliquota:12.0},{ufOrigem:"PI",ufDestino:"AC",aliquota:12.0},{ufOrigem:"PI",ufDestino:"AL",aliquota:12.0},{ufOrigem:"PI",ufDestino:"AM",aliquota:12.0},{ufOrigem:"PI",ufDestino:"AP",aliquota:12.0},{ufOrigem:"PI",ufDestino:"BA",aliquota:12.0},{ufOrigem:"PI",ufDestino:"CE",aliquota:12.0},{ufOrigem:"PI",ufDestino:"DF",aliquota:12.0},{ufOrigem:"PI",ufDestino:"ES",aliquota:12.0},{ufOrigem:"PI",ufDestino:"GO",aliquota:12.0},{ufOrigem:"PI",ufDestino:"MA",aliquota:12.0},{ufOrigem:"PI",ufDestino:"MG",aliquota:12.0},{ufOrigem:"PI",ufDestino:"MS",aliquota:12.0},{ufOrigem:"PI",ufDestino:"MT",aliquota:12.0},{ufOrigem:"PI",ufDestino:"PA",aliquota:12.0},{ufOrigem:"PI",ufDestino:"PB",aliquota:12.0},{ufOrigem:"PI",ufDestino:"PE",aliquota:12.0},{ufOrigem:"PI",ufDestino:"PI",aliquota:17.0},{ufOrigem:"PI",ufDestino:"PR",aliquota:12.0},{ufOrigem:"PI",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"PI",ufDestino:"RN",aliquota:12.0},{ufOrigem:"PI",ufDestino:"RO",aliquota:12.0},{ufOrigem:"PI",ufDestino:"RR",aliquota:12.0},{ufOrigem:"PI",ufDestino:"RS",aliquota:12.0},{ufOrigem:"PI",ufDestino:"SC",aliquota:12.0},{ufOrigem:"PI",ufDestino:"SE",aliquota:12.0},{ufOrigem:"PI",ufDestino:"SP",aliquota:12.0},{ufOrigem:"PI",ufDestino:"TO",aliquota:12.0},{ufOrigem:"PR",ufDestino:"AC",aliquota:7.0},{ufOrigem:"PR",ufDestino:"AL",aliquota:7.0},{ufOrigem:"PR",ufDestino:"AM",aliquota:7.0},{ufOrigem:"PR",ufDestino:"AP",aliquota:7.0},{ufOrigem:"PR",ufDestino:"BA",aliquota:7.0},{ufOrigem:"PR",ufDestino:"CE",aliquota:7.0},{ufOrigem:"PR",ufDestino:"DF",aliquota:7.0},{ufOrigem:"PR",ufDestino:"ES",aliquota:7.0},{ufOrigem:"PR",ufDestino:"GO",aliquota:7.0},{ufOrigem:"PR",ufDestino:"MA",aliquota:7.0},{ufOrigem:"PR",ufDestino:"MG",aliquota:12.0},{ufOrigem:"PR",ufDestino:"MS",aliquota:7.0},{ufOrigem:"PR",ufDestino:"MT",aliquota:7.0},{ufOrigem:"PR",ufDestino:"PA",aliquota:7.0},{ufOrigem:"PR",ufDestino:"PB",aliquota:7.0},{ufOrigem:"PR",ufDestino:"PE",aliquota:7.0},{ufOrigem:"PR",ufDestino:"PI",aliquota:7.0},{ufOrigem:"PR",ufDestino:"PR",aliquota:18.0},{ufOrigem:"PR",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"PR",ufDestino:"RN",aliquota:7.0},{ufOrigem:"PR",ufDestino:"RO",aliquota:7.0},{ufOrigem:"PR",ufDestino:"RR",aliquota:7.0},{ufOrigem:"PR",ufDestino:"RS",aliquota:12.0},{ufOrigem:"PR",ufDestino:"SC",aliquota:12.0},{ufOrigem:"PR",ufDestino:"SE",aliquota:7.0},{ufOrigem:"PR",ufDestino:"SP",aliquota:12.0},{ufOrigem:"PR",ufDestino:"TO",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"AC",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"AL",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"AM",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"AP",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"BA",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"CE",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"DF",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"ES",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"GO",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"MA",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"MG",aliquota:12.0},{ufOrigem:"RJ",ufDestino:"MS",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"MT",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"PA",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"PB",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"PE",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"PI",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"PR",aliquota:12.0},{ufOrigem:"RJ",ufDestino:"RJ",aliquota:20.0},{ufOrigem:"RJ",ufDestino:"RN",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"RO",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"RR",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"RS",aliquota:12.0},{ufOrigem:"RJ",ufDestino:"SC",aliquota:12.0},{ufOrigem:"RJ",ufDestino:"SE",aliquota:7.0},{ufOrigem:"RJ",ufDestino:"SP",aliquota:12.0},{ufOrigem:"RJ",ufDestino:"TO",aliquota:7.0},{ufOrigem:"RN",ufDestino:"AC",aliquota:12.0},{ufOrigem:"RN",ufDestino:"AL",aliquota:12.0},{ufOrigem:"RN",ufDestino:"AM",aliquota:12.0},{ufOrigem:"RN",ufDestino:"AP",aliquota:12.0},{ufOrigem:"RN",ufDestino:"BA",aliquota:12.0},{ufOrigem:"RN",ufDestino:"CE",aliquota:12.0},{ufOrigem:"RN",ufDestino:"DF",aliquota:12.0},{ufOrigem:"RN",ufDestino:"ES",aliquota:12.0},{ufOrigem:"RN",ufDestino:"GO",aliquota:12.0},{ufOrigem:"RN",ufDestino:"MA",aliquota:12.0},{ufOrigem:"RN",ufDestino:"MG",aliquota:12.0},{ufOrigem:"RN",ufDestino:"MS",aliquota:12.0},{ufOrigem:"RN",ufDestino:"MT",aliquota:12.0},{ufOrigem:"RN",ufDestino:"PA",aliquota:12.0},{ufOrigem:"RN",ufDestino:"PB",aliquota:12.0},{ufOrigem:"RN",ufDestino:"PE",aliquota:12.0},{ufOrigem:"RN",ufDestino:"PI",aliquota:12.0},{ufOrigem:"RN",ufDestino:"PR",aliquota:12.0},{ufOrigem:"RN",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"RN",ufDestino:"RN",aliquota:17.0},{ufOrigem:"RN",ufDestino:"RO",aliquota:12.0},{ufOrigem:"RN",ufDestino:"RR",aliquota:12.0},{ufOrigem:"RN",ufDestino:"RS",aliquota:12.0},{ufOrigem:"RN",ufDestino:"SC",aliquota:12.0},{ufOrigem:"RN",ufDestino:"SE",aliquota:12.0},{ufOrigem:"RN",ufDestino:"SP",aliquota:12.0},{ufOrigem:"RN",ufDestino:"TO",aliquota:12.0},{ufOrigem:"RO",ufDestino:"AC",aliquota:12.0},{ufOrigem:"RO",ufDestino:"AL",aliquota:12.0},{ufOrigem:"RO",ufDestino:"AM",aliquota:12.0},{ufOrigem:"RO",ufDestino:"AP",aliquota:12.0},{ufOrigem:"RO",ufDestino:"BA",aliquota:12.0},{ufOrigem:"RO",ufDestino:"CE",aliquota:12.0},{ufOrigem:"RO",ufDestino:"DF",aliquota:12.0},{ufOrigem:"RO",ufDestino:"ES",aliquota:12.0},{ufOrigem:"RO",ufDestino:"GO",aliquota:12.0},{ufOrigem:"RO",ufDestino:"MA",aliquota:12.0},{ufOrigem:"RO",ufDestino:"MG",aliquota:12.0},{ufOrigem:"RO",ufDestino:"MS",aliquota:12.0},{ufOrigem:"RO",ufDestino:"MT",aliquota:12.0},{ufOrigem:"RO",ufDestino:"PA",aliquota:12.0},{ufOrigem:"RO",ufDestino:"PB",aliquota:12.0},{ufOrigem:"RO",ufDestino:"PE",aliquota:12.0},{ufOrigem:"RO",ufDestino:"PI",aliquota:12.0},{ufOrigem:"RO",ufDestino:"PR",aliquota:12.0},{ufOrigem:"RO",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"RO",ufDestino:"RN",aliquota:12.0},{ufOrigem:"RO",ufDestino:"RO",aliquota:17.0},{ufOrigem:"RO",ufDestino:"RR",aliquota:12.0},{ufOrigem:"RO",ufDestino:"RS",aliquota:12.0},{ufOrigem:"RO",ufDestino:"SC",aliquota:12.0},{ufOrigem:"RO",ufDestino:"SE",aliquota:12.0},{ufOrigem:"RO",ufDestino:"SP",aliquota:12.0},{ufOrigem:"RO",ufDestino:"TO",aliquota:12.0},{ufOrigem:"RR",ufDestino:"AC",aliquota:12.0},{ufOrigem:"RR",ufDestino:"AL",aliquota:12.0},{ufOrigem:"RR",ufDestino:"AM",aliquota:12.0},{ufOrigem:"RR",ufDestino:"AP",aliquota:12.0},{ufOrigem:"RR",ufDestino:"BA",aliquota:12.0},{ufOrigem:"RR",ufDestino:"CE",aliquota:12.0},{ufOrigem:"RR",ufDestino:"DF",aliquota:12.0},{ufOrigem:"RR",ufDestino:"ES",aliquota:12.0},{ufOrigem:"RR",ufDestino:"GO",aliquota:12.0},{ufOrigem:"RR",ufDestino:"MA",aliquota:12.0},{ufOrigem:"RR",ufDestino:"MG",aliquota:12.0},{ufOrigem:"RR",ufDestino:"MS",aliquota:12.0},{ufOrigem:"RR",ufDestino:"MT",aliquota:12.0},{ufOrigem:"RR",ufDestino:"PA",aliquota:12.0},{ufOrigem:"RR",ufDestino:"PB",aliquota:12.0},{ufOrigem:"RR",ufDestino:"PE",aliquota:12.0},{ufOrigem:"RR",ufDestino:"PI",aliquota:12.0},{ufOrigem:"RR",ufDestino:"PR",aliquota:12.0},{ufOrigem:"RR",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"RR",ufDestino:"RN",aliquota:12.0},{ufOrigem:"RR",ufDestino:"RO",aliquota:12.0},{ufOrigem:"RR",ufDestino:"RR",aliquota:17.0},{ufOrigem:"RR",ufDestino:"RS",aliquota:12.0},{ufOrigem:"RR",ufDestino:"SC",aliquota:12.0},{ufOrigem:"RR",ufDestino:"SE",aliquota:12.0},{ufOrigem:"RR",ufDestino:"SP",aliquota:12.0},{ufOrigem:"RR",ufDestino:"TO",aliquota:12.0},{ufOrigem:"RS",ufDestino:"AC",aliquota:7.0},{ufOrigem:"RS",ufDestino:"AL",aliquota:7.0},{ufOrigem:"RS",ufDestino:"AM",aliquota:7.0},{ufOrigem:"RS",ufDestino:"AP",aliquota:7.0},{ufOrigem:"RS",ufDestino:"BA",aliquota:7.0},{ufOrigem:"RS",ufDestino:"CE",aliquota:7.0},{ufOrigem:"RS",ufDestino:"DF",aliquota:7.0},{ufOrigem:"RS",ufDestino:"ES",aliquota:7.0},{ufOrigem:"RS",ufDestino:"GO",aliquota:7.0},{ufOrigem:"RS",ufDestino:"MA",aliquota:7.0},{ufOrigem:"RS",ufDestino:"MG",aliquota:12.0},{ufOrigem:"RS",ufDestino:"MS",aliquota:7.0},{ufOrigem:"RS",ufDestino:"MT",aliquota:7.0},{ufOrigem:"RS",ufDestino:"PA",aliquota:7.0},{ufOrigem:"RS",ufDestino:"PB",aliquota:7.0},{ufOrigem:"RS",ufDestino:"PE",aliquota:7.0},{ufOrigem:"RS",ufDestino:"PI",aliquota:7.0},{ufOrigem:"RS",ufDestino:"PR",aliquota:12.0},{ufOrigem:"RS",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"RS",ufDestino:"RN",aliquota:7.0},{ufOrigem:"RS",ufDestino:"RO",aliquota:7.0},{ufOrigem:"RS",ufDestino:"RR",aliquota:7.0},{ufOrigem:"RS",ufDestino:"RS",aliquota:12.0},{ufOrigem:"RS",ufDestino:"SC",aliquota:12.0},{ufOrigem:"RS",ufDestino:"SE",aliquota:7.0},{ufOrigem:"RS",ufDestino:"SP",aliquota:12.0},{ufOrigem:"RS",ufDestino:"TO",aliquota:7.0},{ufOrigem:"SC",ufDestino:"AC",aliquota:7.0},{ufOrigem:"SC",ufDestino:"AL",aliquota:7.0},{ufOrigem:"SC",ufDestino:"AM",aliquota:7.0},{ufOrigem:"SC",ufDestino:"AP",aliquota:7.0},{ufOrigem:"SC",ufDestino:"BA",aliquota:7.0},{ufOrigem:"SC",ufDestino:"CE",aliquota:7.0},{ufOrigem:"SC",ufDestino:"DF",aliquota:7.0},{ufOrigem:"SC",ufDestino:"ES",aliquota:7.0},{ufOrigem:"SC",ufDestino:"GO",aliquota:7.0},{ufOrigem:"SC",ufDestino:"MA",aliquota:7.0},{ufOrigem:"SC",ufDestino:"MG",aliquota:12.0},{ufOrigem:"SC",ufDestino:"MS",aliquota:7.0},{ufOrigem:"SC",ufDestino:"MT",aliquota:7.0},{ufOrigem:"SC",ufDestino:"PA",aliquota:7.0},{ufOrigem:"SC",ufDestino:"PB",aliquota:7.0},{ufOrigem:"SC",ufDestino:"PE",aliquota:7.0},{ufOrigem:"SC",ufDestino:"PI",aliquota:7.0},{ufOrigem:"SC",ufDestino:"PR",aliquota:12.0},{ufOrigem:"SC",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"SC",ufDestino:"RN",aliquota:7.0},{ufOrigem:"SC",ufDestino:"RO",aliquota:7.0},{ufOrigem:"SC",ufDestino:"RR",aliquota:7.0},{ufOrigem:"SC",ufDestino:"RS",aliquota:12.0},{ufOrigem:"SC",ufDestino:"SC",aliquota:17.0},{ufOrigem:"SC",ufDestino:"SE",aliquota:7.0},{ufOrigem:"SC",ufDestino:"SP",aliquota:12.0},{ufOrigem:"SC",ufDestino:"TO",aliquota:7.0},{ufOrigem:"SE",ufDestino:"AC",aliquota:12.0},{ufOrigem:"SE",ufDestino:"AL",aliquota:12.0},{ufOrigem:"SE",ufDestino:"AM",aliquota:12.0},{ufOrigem:"SE",ufDestino:"AP",aliquota:12.0},{ufOrigem:"SE",ufDestino:"BA",aliquota:12.0},{ufOrigem:"SE",ufDestino:"CE",aliquota:12.0},{ufOrigem:"SE",ufDestino:"DF",aliquota:12.0},{ufOrigem:"SE",ufDestino:"ES",aliquota:12.0},{ufOrigem:"SE",ufDestino:"GO",aliquota:12.0},{ufOrigem:"SE",ufDestino:"MA",aliquota:12.0},{ufOrigem:"SE",ufDestino:"MG",aliquota:12.0},{ufOrigem:"SE",ufDestino:"MS",aliquota:12.0},{ufOrigem:"SE",ufDestino:"MT",aliquota:12.0},{ufOrigem:"SE",ufDestino:"PA",aliquota:12.0},{ufOrigem:"SE",ufDestino:"PB",aliquota:12.0},{ufOrigem:"SE",ufDestino:"PE",aliquota:12.0},{ufOrigem:"SE",ufDestino:"PI",aliquota:12.0},{ufOrigem:"SE",ufDestino:"PR",aliquota:12.0},{ufOrigem:"SE",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"SE",ufDestino:"RN",aliquota:12.0},{ufOrigem:"SE",ufDestino:"RO",aliquota:12.0},{ufOrigem:"SE",ufDestino:"RR",aliquota:12.0},{ufOrigem:"SE",ufDestino:"RS",aliquota:12.0},{ufOrigem:"SE",ufDestino:"SC",aliquota:12.0},{ufOrigem:"SE",ufDestino:"SE",aliquota:17.0},{ufOrigem:"SE",ufDestino:"SP",aliquota:12.0},{ufOrigem:"SE",ufDestino:"TO",aliquota:12.0},{ufOrigem:"SP",ufDestino:"AC",aliquota:7.0},{ufOrigem:"SP",ufDestino:"AL",aliquota:7.0},{ufOrigem:"SP",ufDestino:"AM",aliquota:7.0},{ufOrigem:"SP",ufDestino:"AP",aliquota:7.0},{ufOrigem:"SP",ufDestino:"BA",aliquota:7.0},{ufOrigem:"SP",ufDestino:"CE",aliquota:7.0},{ufOrigem:"SP",ufDestino:"DF",aliquota:7.0},{ufOrigem:"SP",ufDestino:"ES",aliquota:7.0},{ufOrigem:"SP",ufDestino:"GO",aliquota:7.0},{ufOrigem:"SP",ufDestino:"MA",aliquota:7.0},{ufOrigem:"SP",ufDestino:"MG",aliquota:12.0},{ufOrigem:"SP",ufDestino:"MS",aliquota:7.0},{ufOrigem:"SP",ufDestino:"MT",aliquota:7.0},{ufOrigem:"SP",ufDestino:"PA",aliquota:7.0},{ufOrigem:"SP",ufDestino:"PB",aliquota:7.0},{ufOrigem:"SP",ufDestino:"PE",aliquota:7.0},{ufOrigem:"SP",ufDestino:"PI",aliquota:7.0},{ufOrigem:"SP",ufDestino:"PR",aliquota:12.0},{ufOrigem:"SP",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"SP",ufDestino:"RN",aliquota:7.0},{ufOrigem:"SP",ufDestino:"RO",aliquota:7.0},{ufOrigem:"SP",ufDestino:"RR",aliquota:7.0},{ufOrigem:"SP",ufDestino:"RS",aliquota:12.0},{ufOrigem:"SP",ufDestino:"SC",aliquota:12.0},{ufOrigem:"SP",ufDestino:"SE",aliquota:7.0},{ufOrigem:"SP",ufDestino:"SP",aliquota:12.0},{ufOrigem:"SP",ufDestino:"TO",aliquota:7.0},{ufOrigem:"TO",ufDestino:"AC",aliquota:12.0},{ufOrigem:"TO",ufDestino:"AL",aliquota:12.0},{ufOrigem:"TO",ufDestino:"AM",aliquota:12.0},{ufOrigem:"TO",ufDestino:"AP",aliquota:12.0},{ufOrigem:"TO",ufDestino:"BA",aliquota:12.0},{ufOrigem:"TO",ufDestino:"CE",aliquota:12.0},{ufOrigem:"TO",ufDestino:"DF",aliquota:12.0},{ufOrigem:"TO",ufDestino:"ES",aliquota:12.0},{ufOrigem:"TO",ufDestino:"GO",aliquota:12.0},{ufOrigem:"TO",ufDestino:"MA",aliquota:12.0},{ufOrigem:"TO",ufDestino:"MG",aliquota:12.0},{ufOrigem:"TO",ufDestino:"MS",aliquota:12.0},{ufOrigem:"TO",ufDestino:"MT",aliquota:12.0},{ufOrigem:"TO",ufDestino:"PA",aliquota:12.0},{ufOrigem:"TO",ufDestino:"PB",aliquota:12.0},{ufOrigem:"TO",ufDestino:"PE",aliquota:12.0},{ufOrigem:"TO",ufDestino:"PI",aliquota:12.0},{ufOrigem:"TO",ufDestino:"PR",aliquota:12.0},{ufOrigem:"TO",ufDestino:"RJ",aliquota:12.0},{ufOrigem:"TO",ufDestino:"RN",aliquota:12.0},{ufOrigem:"TO",ufDestino:"RO",aliquota:12.0},{ufOrigem:"TO",ufDestino:"RR",aliquota:12.0},{ufOrigem:"TO",ufDestino:"RS",aliquota:12.0},{ufOrigem:"TO",ufDestino:"SC",aliquota:12.0},{ufOrigem:"TO",ufDestino:"SE",aliquota:12.0},{ufOrigem:"TO",ufDestino:"SP",aliquota:12.0},{ufOrigem:"TO",ufDestino:"TO",aliquota:17.0}];
+
+const UF_LIST = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
+  "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+];
+
+// Resolução do Senado Federal nº 22/1989: alíquota interestadual reduzida (7%) quando a
+// origem é Sul/Sudeste (exceto ES) e o destino é Norte, Nordeste, Centro-Oeste ou ES;
+// nos demais casos interestaduais a alíquota é 12%.
+const UF_SUL_SUDESTE_EXCETO_ES = ["SP", "RJ", "MG", "PR", "SC", "RS"];
+const UF_DESTINO_ALIQUOTA_REDUZIDA = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+  "PA", "PB", "PE", "PI", "RN", "RO", "RR", "SE", "TO",
+];
+
+function loadJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return structuredClone(fallback);
+    const parsed = JSON.parse(raw);
+    if (!parsed || (Array.isArray(fallback) && !Array.isArray(parsed))) return structuredClone(fallback);
+    return parsed;
+  } catch (e) {
+    return structuredClone(fallback);
+  }
+}
+function saveJSON(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+let anttTable = loadJSON(STORAGE_KEYS.antt, DEFAULT_ANTT);
+// Migração: cadastros salvos antes do campo "nome" existir ganham o nome padrão do eixo.
+anttTable.forEach((row) => {
+  if (!row.nome) row.nome = NOMES_PADRAO_EIXOS[row.eixos] || "";
+});
+let veiculosTable = loadJSON(STORAGE_KEYS.veiculos, DEFAULT_VEICULOS);
+let vendaParams = loadJSON(STORAGE_KEYS.venda, DEFAULT_VENDA);
+let icmsTable = loadJSON(STORAGE_KEYS.icms, DEFAULT_ICMS);
+// Migração: quem salvou a aba ICMS antes de existir a tabela oficial ficou com cadastro
+// vazio — nesse caso, preenche com a tabela oficial em vez de deixar sem nenhuma alíquota.
+if (!Array.isArray(icmsTable) || icmsTable.length === 0) icmsTable = structuredClone(DEFAULT_ICMS);
+let ajusteKmPct = loadJSON(STORAGE_KEYS.ajusteKm, 0);
+let orsApiKey = loadJSON(STORAGE_KEYS.orsApiKey, "");
+let qualpApiKey = loadJSON(STORAGE_KEYS.qualpApiKey, "");
+let anttConfig = loadJSON(STORAGE_KEYS.anttConfig, { freightType: "A", loadType: "geral", isEmptyReturn: false });
+let vendedoresTable = loadJSON(STORAGE_KEYS.vendedores, []);
+let spotTable = loadJSON(STORAGE_KEYS.spot, []);
+let contadorCotacoes = loadJSON(STORAGE_KEYS.contadorCotacoes, {});
+
+/** Gera o próximo número sequencial de cotação para o ano informado (reinicia a cada ano). */
+function proximoNumeroCotacao(ano) {
+  contadorCotacoes[ano] = (contadorCotacoes[ano] || 0) + 1;
+  saveJSON(STORAGE_KEYS.contadorCotacoes, contadorCotacoes);
+  return contadorCotacoes[ano];
+}
+let historicoCotacoes = loadJSON(STORAGE_KEYS.historico, []);
+
+// Migração única: cotações salvas antes de existir a numeração ficam sem "numeroFormatado".
+// Se alguma estiver assim, renumera TODO o histórico em ordem cronológica real (mais antiga = nº 1),
+// para o número sempre bater com a ordem em que as cotações foram criadas. Depois desta correção
+// todo registro passa a ter número, então isso não roda de novo nas próximas vezes.
+if (historicoCotacoes.some((c) => !c.numeroFormatado)) {
+  const porAno = {};
+  [...historicoCotacoes]
+    .sort((a, b) => new Date(a.criadoEm) - new Date(b.criadoEm))
+    .forEach((c) => {
+      const ano = new Date(c.criadoEm).getFullYear();
+      porAno[ano] = (porAno[ano] || 0) + 1;
+      c.numero = porAno[ano];
+      c.ano = ano;
+      c.numeroFormatado = `${c.numero}/${ano}`;
+    });
+  contadorCotacoes = porAno;
+  saveJSON(STORAGE_KEYS.historico, historicoCotacoes);
+  saveJSON(STORAGE_KEYS.contadorCotacoes, contadorCotacoes);
+}
+
+/* ============================================================
+   Estado do último cálculo (usado pela aba de venda / painel)
+   ============================================================ */
+const state = {
+  kmDistancia: 0,
+  pedagio: 0,
+  custoAntt: 0,
+  custoAprox: 0,
+  servicoAdicionalDescricao: "",
+  servicoAdicionalValor: 0,
+  ufOrigem: "",
+  ufDestino: "",
+  valorMercadoria: 0,
+  // Detalhes do custo ANTT (preenchidos em calcular())
+  eixos: null,
+  anttNome: "",
+  anttFonte: "cadastro", // "cadastro" ou "api"
+  anttCcd: 0,
+  anttCc: 0,
+  anttFreightCost: null,
+  anttLoadUnloadCost: null,
+  anttResolucao: null,
+  // Detalhes do custo Aproximado/Mercado
+  veiculoTipo: "",
+  veiculoValorKm: 0,
+  aproxFonte: "km", // "km" ou "spot"
+  aproxSpotValor: null,
+  // Detalhes da rota/KM (preenchidos em aplicarAjusteEExibir())
+  fonteKm: null,
+  kmBruto: null,
+  ajusteKmPct: 0,
+  // Detalhes da composição (preenchidos em atualizarComposicao())
+  mkp: null,
+  pctCustoFixo: 0,
+  pctImpostos: 0,
+  pctMargem: 0,
+  pctComissao: 0,
+  pctAdvalorem: 0,
+  advalorem: 0,
+  aliquotaIcms: null,
+  fonteIcms: "",
+  compAntt: null,
+  compMerc: null,
+};
+
+/* ============================================================
+   Utilidades
+   ============================================================ */
+const fmtBRL = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const fmtNum = (v, dec = 1) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+const $ = (id) => document.getElementById(id);
+const onlyDigits = (s) => (s || "").replace(/\D/g, "");
+
+function toRad(deg) { return (deg * Math.PI) / 180; }
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/* ============================================================
+   Tabs (inclui os menus suspensos "Cadastros" e "Configuração")
+   ============================================================ */
+const MENUS_SUSPENSOS = [
+  { dropdownId: "cadastrosDropdown", toggleId: "btnCadastrosToggle", menuId: "cadastrosMenu" },
+  { dropdownId: "configDropdown", toggleId: "btnConfigToggle", menuId: "configMenu" },
+];
+
+function fecharMenusSuspensos() {
+  MENUS_SUSPENSOS.forEach((m) => ($(m.menuId).hidden = true));
+}
+
+/** Ativa uma aba pelo nome (data-tab), com ou sem clique num botão do menu — usado tanto
+ * pela navegação normal quanto por links internos (ex.: número da cotação → DRE). */
+function ativarAba(nomeAba, btnClicado) {
+  document.querySelectorAll(".tab-btn[data-tab]").forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+  $("tab-" + nomeAba).classList.add("active");
+
+  const referencia = btnClicado || document.querySelector(`.tab-btn[data-tab="${nomeAba}"]`);
+  if (referencia) referencia.classList.add("active");
+
+  MENUS_SUSPENSOS.forEach((m) => {
+    const ehDesteMenu = referencia ? !!referencia.closest(`#${m.menuId}`) : false;
+    $(m.toggleId).classList.toggle("active", ehDesteMenu);
+  });
+  fecharMenusSuspensos();
+}
+
+document.querySelectorAll(".tab-btn[data-tab]").forEach((btn) => {
+  btn.addEventListener("click", () => ativarAba(btn.dataset.tab, btn));
+});
+
+MENUS_SUSPENSOS.forEach((m) => {
+  $(m.toggleId).addEventListener("click", (e) => {
+    e.stopPropagation();
+    const estavaAberto = !$(m.menuId).hidden;
+    fecharMenusSuspensos();
+    $(m.menuId).hidden = estavaAberto;
+  });
+});
+
+document.addEventListener("click", (e) => {
+  const dentroDeAlgumMenu = MENUS_SUSPENSOS.some((m) => $(m.dropdownId).contains(e.target));
+  if (!dentroDeAlgumMenu) fecharMenusSuspensos();
+});
+
+/* ============================================================
+   CEP -> Endereço (ViaCEP) -> Coordenadas (Nominatim/OSM)
+   Fallback: sem logradouro -> geocodifica o centro da cidade
+   ============================================================ */
+async function buscarCEP(cep) {
+  const clean = onlyDigits(cep);
+  if (clean.length !== 8) return { erro: true, motivo: "CEP inválido" };
+  try {
+    const resp = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+    const data = await resp.json();
+    if (data.erro) return { erro: true, motivo: "CEP não encontrado" };
+    return {
+      erro: false,
+      logradouro: data.logradouro || "",
+      bairro: data.bairro || "",
+      cidade: data.localidade || "",
+      uf: data.uf || "",
+    };
+  } catch (e) {
+    return { erro: true, motivo: "Falha ao consultar CEP (verifique internet)" };
+  }
+}
+
+async function geocodificar(query) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(query)}`;
+    const resp = await fetch(url, { headers: { Accept: "application/json" } });
+    const data = await resp.json();
+    if (!data || !data.length) return null;
+    return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), label: data[0].display_name };
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Busca estruturada do Nominatim (campos separados em vez de uma frase livre).
+ * É bem mais confiável que a busca livre: por exemplo, "São Paulo - SP, Brasil"
+ * em texto livre pode casar com qualquer lugar cujo nome contenha essas palavras
+ * (já aconteceu de resolver para um lugar chamado "Brasil" a 200km de distância),
+ * enquanto os parâmetros city/state/country restringem a busca ao município certo.
+ */
+async function geocodificarEstruturado(params) {
+  try {
+    const qs = new URLSearchParams({ format: "json", limit: "1", countrycodes: "br", ...params });
+    const url = `https://nominatim.openstreetmap.org/search?${qs.toString()}`;
+    const resp = await fetch(url, { headers: { Accept: "application/json" } });
+    const data = await resp.json();
+    if (!data || !data.length) return null;
+    return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), label: data[0].display_name };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function geocodificarCidade(cidade, uf) {
+  if (!cidade) return null;
+  const params = uf ? { city: cidade, state: uf } : { city: cidade };
+  return geocodificarEstruturado(params);
+}
+
+async function geocodificarEndereco(logradouro, cidade, uf) {
+  // Busca estruturada primeiro (sem o bairro, que costuma atrapalhar o casamento da rua)
+  const estruturado = await geocodificarEstruturado({ street: logradouro, city: cidade, state: uf });
+  if (estruturado) return estruturado;
+  // Fallback: busca livre com o texto completo do endereço
+  return geocodificar(`${logradouro}, ${cidade} - ${uf}, Brasil`);
+}
+
+function separarCidadeUf(texto) {
+  // Aceita hífen normal ou travessão (comum em texto colado de outros lugares)
+  const m = (texto || "").trim().match(/^(.*?)\s*[-–—]\s*([A-Za-z]{2})$/);
+  if (m) {
+    const uf = m[2].trim().toUpperCase();
+    if (UF_LIST.includes(uf)) return { cidade: m[1].trim(), uf };
+  }
+  return { cidade: (texto || "").trim(), uf: "" };
+}
+
+/**
+ * Resolve coordenadas para um lado (origem/destino) a partir do CEP e/ou cidade digitada.
+ * Retorna { coords: {lat, lon} | null, precisao: 'endereco'|'cidade'|'manual', mensagem, cidadeResolvida, uf }
+ * O "uf" vem da fonte mais confiável (ViaCEP ou o nome da cidade), não de um regex sobre o
+ * texto do campo — assim o ICMS continua funcionando mesmo se o campo Cidade não estiver
+ * exatamente no formato "Nome - UF" (por exemplo, se o usuário editou o texto manualmente).
+ */
+async function resolverLocal(cepInputId, cidadeInputId, feedbackId) {
+  const feedback = $(feedbackId);
+  const cepValor = $(cepInputId).value;
+  const cidadeValor = $(cidadeInputId).value.trim();
+  const clean = onlyDigits(cepValor);
+
+  feedback.className = "address-feedback";
+
+  if (clean.length === 8) {
+    feedback.textContent = "Consultando CEP...";
+    const dadosCep = await buscarCEP(clean);
+    if (!dadosCep.erro) {
+      const cidadeCep = `${dadosCep.cidade} - ${dadosCep.uf}`;
+      if (!cidadeValor) $(cidadeInputId).value = cidadeCep;
+
+      if (dadosCep.logradouro) {
+        const geo = await geocodificarEndereco(dadosCep.logradouro, dadosCep.cidade, dadosCep.uf);
+        if (geo) {
+          feedback.textContent = `✓ ${dadosCep.logradouro}, ${dadosCep.bairro} — ${cidadeCep} (endereço)`;
+          feedback.classList.add("ok");
+          return { coords: geo, precisao: "endereco", cidadeResolvida: cidadeCep, uf: dadosCep.uf };
+        }
+      }
+      // Sem logradouro no CEP OU geocodificação do endereço falhou -> centro da cidade
+      const geoCidade = await geocodificarCidade(dadosCep.cidade, dadosCep.uf);
+      if (geoCidade) {
+        feedback.textContent = `✓ CEP sem endereço detalhado — usando centro de ${cidadeCep}`;
+        feedback.classList.add("warn");
+        return { coords: geoCidade, precisao: "cidade", cidadeResolvida: cidadeCep, uf: dadosCep.uf };
+      }
+      feedback.textContent = `CEP válido, mas não foi possível localizar coordenadas de ${cidadeCep}`;
+      feedback.classList.add("err");
+      return { coords: null, precisao: null, cidadeResolvida: cidadeCep, uf: dadosCep.uf };
+    }
+    feedback.textContent = dadosCep.motivo + " — tentando pela cidade digitada...";
+    feedback.classList.add("warn");
+  }
+
+  // Sem CEP válido: usa o nome da cidade digitado como centro
+  if (cidadeValor) {
+    const { cidade, uf } = separarCidadeUf(cidadeValor);
+    const geoCidade = await geocodificarCidade(cidade, uf);
+    if (geoCidade) {
+      feedback.textContent = `✓ Usando centro de ${cidadeValor} (sem CEP)`;
+      feedback.classList.add("warn");
+      return { coords: geoCidade, precisao: "cidade", cidadeResolvida: cidadeValor, uf };
+    }
+    feedback.textContent = `Não foi possível localizar "${cidadeValor}"`;
+    feedback.classList.add("err");
+    return { coords: null, precisao: null, cidadeResolvida: cidadeValor, uf };
+  }
+
+  feedback.textContent = "Informe o CEP ou a cidade";
+  feedback.classList.add("err");
+  return { coords: null, precisao: null, cidadeResolvida: "", uf: "" };
+}
+
+/* ============================================================
+   Distância rodoviária (OSRM) com fallback linha reta x fator
+   Quando há mais de uma rota plausível, pergunta ao usuário
+   qual delas deve ser usada.
+   ============================================================ */
+function formatarDuracao(segundos) {
+  const totalMin = Math.round(segundos / 60);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h === 0) return `${m} min`;
+  return m > 0 ? `${h}h ${m}min` : `${h}h`;
+}
+
+// Tempo de viagem estimado: velocidade média de 70 km/h + 1h fixa de parada
+// (abastecimento, almoço), em vez do tempo "ideal" sem paradas que o OSRM devolve.
+function tempoViagemEstimadoSeg(km) {
+  const horas = km / 70 + 1;
+  return horas * 3600;
+}
+
+function escolherRota(routes) {
+  return new Promise((resolve) => {
+    const overlay = $("rotaModalOverlay");
+    const opcoes = $("rotaOpcoes");
+    opcoes.innerHTML = "";
+
+    routes.forEach((r, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "rota-opcao";
+      btn.innerHTML = `<span class="rota-opcao-titulo">Rota ${idx + 1}${idx === 0 ? " (sugerida)" : ""}</span>
+        <span class="rota-opcao-detalhe">${fmtNum(r.distance / 1000, 1)} km &middot; ${formatarDuracao(tempoViagemEstimadoSeg(r.distance / 1000))} de viagem</span>`;
+      btn.addEventListener("click", () => {
+        overlay.hidden = true;
+        resolve(r);
+      });
+      opcoes.appendChild(btn);
+    });
+
+    overlay.hidden = false;
+    $("btnCancelarRota").onclick = () => {
+      overlay.hidden = true;
+      resolve(null);
+    };
+  });
+}
+
+/**
+ * Rota de caminhão via OpenRouteService (perfil HGV), quando o usuário cadastrou
+ * uma chave gratuita na aba "Rota". Já considera restrições de veículo pesado,
+ * então não depende de um "% de ajuste" calibrado manualmente por trecho.
+ */
+async function calcularDistanciaOrsHgv(origem, destino, apiKey) {
+  try {
+    const resp = await fetch("https://api.openrouteservice.org/v2/directions/driving-hgv", {
+      method: "POST",
+      headers: { Authorization: apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        coordinates: [
+          [origem.lon, origem.lat],
+          [destino.lon, destino.lat],
+        ],
+      }),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const rota = data && data.routes && data.routes[0];
+    const resumo = rota && rota.summary;
+    if (!resumo || typeof resumo.distance !== "number") return null;
+    const km = resumo.distance / 1000;
+    return { km, duracaoSeg: tempoViagemEstimadoSeg(km), fonte: "rota-caminhao" };
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Rota + pedágio via API QualP (mesmo motor do site), quando o usuário cadastrou uma
+ * chave paga na aba "Rota". Uma única consulta já traz KM, duração e o pedágio somado
+ * (praça a praça, pela quantidade de eixos selecionada) — a fonte mais precisa disponível.
+ * Aceita CEP ou "Cidade - UF" direto como origem/destino (sem precisar geocodificar).
+ */
+async function calcularRotaQualp(origemTexto, destinoTexto, eixos, apiKey) {
+  try {
+    const resp = await fetch("https://api.qualp.com.br/rotas/v4", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "access-token": apiKey },
+      body: JSON.stringify({
+        locations: [origemTexto, destinoTexto],
+        config: { vehicle: { type: "truck", axis: eixos } },
+        show: { tolls: true },
+      }),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (!data || !data.distancia || typeof data.distancia.valor !== "number") return null;
+
+    const km = data.distancia.valor;
+    const duracaoSeg = data.duracao && typeof data.duracao.valor === "number" ? data.duracao.valor : tempoViagemEstimadoSeg(km);
+    const pracas = (data.pedagios || []).map((p) => ({
+      nome: p.nome,
+      uf: p.uf,
+      rodovia: p.rodovia,
+      valor: (p.tarifa && Number(p.tarifa[String(eixos)])) || 0,
+    }));
+    const pedagio = pracas.reduce((soma, p) => soma + p.valor, 0);
+
+    return { km, duracaoSeg, pedagio, pracas, fonte: "qualp" };
+  } catch (e) {
+    return null;
+  }
+}
+
+function textoLocalParaQualp(cepInputId, cidadeInputId) {
+  const cep = onlyDigits($(cepInputId).value);
+  if (cep.length === 8) return $(cepInputId).value.trim();
+  const cidade = $(cidadeInputId).value.trim();
+  return cidade || null;
+}
+
+/**
+ * Tabela de frete mínimo ANTT oficial via API QualP — valores da resolução vigente para o
+ * km e a quantidade de eixos informados, sem depender de cadastro manual de CCD/CC.
+ */
+async function calcularAnttQualp(km, eixos, apiKey) {
+  try {
+    const resp = await fetch("https://api.qualp.com.br/tabela-frete/v1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "access-token": apiKey },
+      body: JSON.stringify({
+        distance: km,
+        axis: eixos,
+        freight_type: anttConfig.freightType,
+        load_type: anttConfig.loadType,
+        is_empty_return: !!anttConfig.isEmptyReturn,
+      }),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const custos = data && data.costs;
+    if (!custos || typeof custos.freight_cost !== "number") return null;
+    return {
+      freightCost: custos.freight_cost,
+      loadUnloadCost: Number(custos.load_unload_cost) || 0,
+      resolucao: data.antt_resolution ? data.antt_resolution.name : null,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function calcularDistanciaRodoviaria(origem, destino) {
+  if (orsApiKey) {
+    const resultadoOrs = await calcularDistanciaOrsHgv(origem, destino, orsApiKey);
+    if (resultadoOrs) return resultadoOrs;
+    // Chave ausente/inválida ou serviço fora do ar: cai para o OSRM abaixo, sem travar o cálculo.
+  }
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${origem.lon},${origem.lat};${destino.lon},${destino.lat}?overview=false&alternatives=true`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data && data.routes && data.routes.length) {
+      let rota = data.routes[0];
+      if (data.routes.length > 1) {
+        const escolhida = await escolherRota(data.routes);
+        if (escolhida) rota = escolhida;
+      }
+      const km = rota.distance / 1000;
+      return { km, duracaoSeg: tempoViagemEstimadoSeg(km), fonte: "rota" };
+    }
+  } catch (e) {
+    /* ignora e cai no fallback */
+  }
+  const reta = haversineKm(origem.lat, origem.lon, destino.lat, destino.lon);
+  const km = reta * 1.3;
+  return { km, duracaoSeg: tempoViagemEstimadoSeg(km), fonte: "estimativa" };
+}
+
+// Guarda o último KM bruto (antes do ajuste) e sua fonte, para recalcular na hora
+// quando o usuário mexer no % de ajuste, sem precisar refazer a consulta de rota.
+let ultimoKmBruto = null;
+let ultimaFonteKm = null;
+
+function aplicarAjusteEExibir() {
+  if (ultimoKmBruto === null) return;
+  const kmFinal = ultimoKmBruto * (1 + ajusteKmPct / 100);
+  const duracaoFinal = tempoViagemEstimadoSeg(kmFinal);
+  $("kmDistancia").value = kmFinal.toFixed(1);
+
+  state.fonteKm = ultimaFonteKm;
+  state.kmBruto = ultimoKmBruto;
+  state.ajusteKmPct = ajusteKmPct;
+
+  const ajusteTxto = ajusteKmPct ? ` (${fmtNum(ultimoKmBruto, 1)} km ${ajusteKmPct > 0 ? "+" : ""}${fmtNum(ajusteKmPct, 1)}% de ajuste)` : "";
+  const dur = ` (~${formatarDuracao(duracaoFinal)} de viagem)`;
+  const mensagens = {
+    qualp: `Distância e pedágio calculados via API QualP${ajusteTxto}${dur}.`,
+    "rota-caminhao": `Distância calculada com perfil de caminhão (OpenRouteService/HGV)${ajusteTxto}${dur}.`,
+    rota: `Distância rodoviária calculada automaticamente${ajusteTxto}${dur}.`,
+    estimativa: `Estimativa (linha reta × fator de estrada) — rota indisponível no momento${ajusteTxto}${dur}.`,
+  };
+  $("kmInfo").textContent = mensagens[ultimaFonteKm] || mensagens.estimativa;
+  calcular();
+}
+
+$("ajusteKm").addEventListener("input", () => {
+  ajusteKmPct = parseFloat($("ajusteKm").value) || 0;
+  saveJSON(STORAGE_KEYS.ajusteKm, ajusteKmPct);
+  aplicarAjusteEExibir();
+});
+
+let calculandoKm = false;
+async function executarCalculoKm() {
+  if (calculandoKm) return;
+  calculandoKm = true;
+  const btn = $("btnCalcularKm");
+  const info = $("kmInfo");
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Calculando...";
+  info.textContent = "";
+  $("pedagioInfo").textContent = "";
+  try {
+    const [origem, destino] = await Promise.all([
+      resolverLocal("cepOrigem", "cidadeOrigem", "feedbackOrigem"),
+      resolverLocal("cepDestino", "cidadeDestino", "feedbackDestino"),
+    ]);
+    state.ufOrigem = origem.uf || "";
+    state.ufDestino = destino.uf || "";
+    atualizarComposicao();
+
+    // 1) API QualP (se configurada): KM + duração + pedágio numa só consulta — a fonte mais
+    // precisa, pois usa o mesmo motor de rota e a mesma base de praças do site da QualP.
+    if (qualpApiKey) {
+      const origemTxt = textoLocalParaQualp("cepOrigem", "cidadeOrigem");
+      const destinoTxt = textoLocalParaQualp("cepDestino", "cidadeDestino");
+      if (origemTxt && destinoTxt) {
+        const eixosAtual = parseInt($("qtdEixos").value, 10) || 2;
+        const resultadoQualp = await calcularRotaQualp(origemTxt, destinoTxt, eixosAtual, qualpApiKey);
+        if (resultadoQualp) {
+          ultimoKmBruto = resultadoQualp.km;
+          ultimaFonteKm = "qualp";
+          aplicarAjusteEExibir();
+
+          $("pedagio").value = resultadoQualp.pedagio.toFixed(2);
+          $("pedagioInfo").textContent = resultadoQualp.pracas.length
+            ? `${resultadoQualp.pracas.length} praça(s) via QualP: ${resultadoQualp.pracas.map((p) => `${p.nome}-${p.uf} (${fmtBRL(p.valor)})`).join(", ")}`
+            : "Nenhuma praça de pedágio detectada no trajeto (via QualP).";
+          calcular();
+          return;
+        }
+        info.textContent = "Chave QualP configurada, mas a consulta falhou — usando OpenRouteService/OSRM.";
+      }
+    }
+
+    if (!origem.coords || !destino.coords) {
+      info.textContent = "Não foi possível calcular: verifique CEP/cidade de origem e destino.";
+      return;
+    }
+    const resultado = await calcularDistanciaRodoviaria(origem.coords, destino.coords);
+    ultimoKmBruto = resultado.km;
+    ultimaFonteKm = resultado.fonte;
+    aplicarAjusteEExibir();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+    calculandoKm = false;
+  }
+}
+
+$("btnCalcularKm").addEventListener("click", executarCalculoKm);
+
+/** Recalcula os custos na hora se já existir um resultado na tela (evita mostrar um
+ * resultado "do nada", com R$0,00, antes do primeiro clique em "Calcular Custos"). */
+function recalcularSeJaTiverResultado() {
+  if (!$("resultsCard").hidden) calcular();
+}
+
+$("qtdEixos").addEventListener("change", () => {
+  // Com QualP configurado, o pedágio muda por eixo — refaz a consulta de rota/pedágio,
+  // que já recalcula os custos no final. Sem QualP, só precisa recalcular com o KM atual.
+  if (qualpApiKey) tentarAutoCalculoKm();
+  else recalcularSeJaTiverResultado();
+});
+$("tipoVeiculo").addEventListener("change", recalcularSeJaTiverResultado);
+$("servicoAdicionalValor").addEventListener("input", recalcularSeJaTiverResultado);
+
+/* Dispara o cálculo de KM automaticamente assim que origem e destino
+   estiverem preenchidos (via CEP ou seleção no autocomplete de cidade). */
+let autoCalcTimer;
+function tentarAutoCalculoKm() {
+  const origemPronta = onlyDigits($("cepOrigem").value).length === 8 || $("cidadeOrigem").value.trim().length > 2;
+  const destinoPronta = onlyDigits($("cepDestino").value).length === 8 || $("cidadeDestino").value.trim().length > 2;
+  if (!origemPronta || !destinoPronta) return;
+  clearTimeout(autoCalcTimer);
+  autoCalcTimer = setTimeout(executarCalculoKm, 300);
+}
+
+/* ============================================================
+   Selects: eixos (do cadastro ANTT) e tipo de veículo
+   ============================================================ */
+function preencherSelects() {
+  const selEixos = $("qtdEixos");
+  const eixoAtual = selEixos.value;
+  selEixos.innerHTML = anttTable
+    .map((r) => `<option value="${r.eixos}">${r.eixos} eixos${r.nome ? " — " + r.nome : ""}</option>`)
+    .join("");
+  if (eixoAtual && anttTable.some((r) => String(r.eixos) === eixoAtual)) selEixos.value = eixoAtual;
+
+  const selVeiculo = $("tipoVeiculo");
+  const veiculoAtual = selVeiculo.value;
+  selVeiculo.innerHTML = veiculosTable
+    .map((v) => `<option value="${v.tipo}">${v.tipo}</option>`)
+    .join("");
+  if (veiculoAtual && veiculosTable.some((v) => v.tipo === veiculoAtual)) selVeiculo.value = veiculoAtual;
+}
+
+/* ============================================================
+   Cálculo principal
+   ============================================================ */
+function calcularMkp() {
+  // MKP = 1 - (soma dos percentuais / 100). Preço de venda = Custo ÷ MKP.
+  const soma = (Number(vendaParams.pctCustoFixo) || 0) + (Number(vendaParams.pctImpostos) || 0) + (Number(vendaParams.pctMargem) || 0) + (Number(vendaParams.pctComissao) || 0);
+  const mkp = 1 - soma / 100;
+  return { soma, mkp: mkp > 0 ? mkp : null };
+}
+
+/* ------------------------------------------------------------
+   ICMS interestadual: regra padrão (Resolução SF 22/89) + cadastro
+   de exceções (icmsTable), usado para o cálculo "por dentro".
+   ------------------------------------------------------------ */
+function regraInterestadualIcms(ufOrigem, ufDestino) {
+  if (!ufOrigem || !ufDestino || ufOrigem === ufDestino) return null;
+  if (UF_SUL_SUDESTE_EXCETO_ES.includes(ufOrigem) && UF_DESTINO_ALIQUOTA_REDUZIDA.includes(ufDestino)) {
+    return 7;
+  }
+  return 12;
+}
+
+function obterAliquotaIcms(ufOrigem, ufDestino) {
+  if (!ufOrigem || !ufDestino) {
+    return { aliquota: null, fonte: "informe origem e destino com UF (CEP ou cidade selecionada na lista)" };
+  }
+  const cadastro = icmsTable.find((r) => r.ufOrigem === ufOrigem && r.ufDestino === ufDestino);
+  if (cadastro) return { aliquota: Number(cadastro.aliquota) || 0, fonte: "tabela ICMS" };
+  // Fallback de segurança: só é usado se a combinação de UF tiver sido removida da tabela.
+  const regra = regraInterestadualIcms(ufOrigem, ufDestino);
+  if (regra !== null) return { aliquota: regra, fonte: "regra padrão (Resolução SF 22/89)" };
+  return { aliquota: null, fonte: `${ufOrigem} → ${ufDestino} não está na tabela ICMS — cadastre a alíquota na aba ICMS` };
+}
+
+/* ------------------------------------------------------------
+   Cálculo principal: custo da operação + composição do frete
+   (Frete Peso + Ad Valorem + Pedágio, com ICMS "por dentro")
+   ------------------------------------------------------------ */
+/** Mostra um aviso destacado sobre a origem do Custo Aproximado (SPOT cadastrado x cálculo por
+ * R$/km), para deixar claro para quem está cotando o quão confiável é o valor mostrado. */
+function atualizarSpotInfoBox(spot, km) {
+  const box = $("spotInfoBox");
+  box.hidden = false;
+  if (spot) {
+    box.className = "spot-info-box ok";
+    box.textContent = "✓ Valor SPOT cadastrado para este trecho e veículo — tabela com assertividade de 100% para trechos acima de 600 km.";
+  } else {
+    box.className = "spot-info-box warn";
+    box.textContent = "⚠ Sem valor SPOT cadastrado para este trecho — o Custo Aproximado foi calculado por R$/km, sem apresentação de valores pela controladoria de SPOT.";
+  }
+}
+
+let calculoAnttSeq = 0;
+async function calcular() {
+  const km = parseFloat($("kmDistancia").value) || 0;
+  const pedagio = parseFloat($("pedagio").value) || 0;
+  const eixos = parseInt($("qtdEixos").value, 10);
+  const veiculo = $("tipoVeiculo").value;
+  const valorMercadoria = parseFloat($("valorMercadoria").value) || 0;
+
+  const linhaAntt = anttTable.find((r) => r.eixos === eixos) || { ccd: 0, cc: 0, nome: "" };
+  const linhaVeiculo = veiculosTable.find((v) => v.tipo === veiculo) || { valorKm: 0 };
+
+  // Serviço Adicional: custo extra (ajudante, seguro, taxa de espera etc.) que soma direto no
+  // valor da contratação de ambos os cenários — não é rota nem pedágio, é um custo à parte.
+  const servicoAdicionalDescricao = $("servicoAdicionalDescricao").value.trim();
+  const servicoAdicionalValor = parseFloat($("servicoAdicionalValor").value) || 0;
+  const servicoAdicionalTexto = servicoAdicionalValor
+    ? ` + ${fmtBRL(servicoAdicionalValor)} (serviço adicional${servicoAdicionalDescricao ? ": " + servicoAdicionalDescricao : ""})`
+    : "";
+
+  // Custo Aproximado: usa o valor SPOT cadastrado para este trecho + veículo, se existir — o
+  // SPOT é o preço fechado do veículo, sem pedágio (o pedágio já tem seu próprio campo/linha
+  // em todo o resto do app, então não entra aqui). Sem SPOT, cai no cálculo por R$/km, que aí
+  // sim soma o pedágio (não tem outro lugar pra vir esse custo nesse caso).
+  const spot = buscarSpot($("cidadeOrigem").value, $("cidadeDestino").value, veiculo);
+  const custoAprox = (spot ? spot.valor : linhaVeiculo.valorKm * km + pedagio) + servicoAdicionalValor;
+  atualizarSpotInfoBox(spot, km);
+
+  let custoAntt = linhaAntt.ccd * km + linhaAntt.cc + pedagio + servicoAdicionalValor;
+
+  const nomeVeiculoAntt = linhaAntt.nome ? `— ${linhaAntt.nome}` : "";
+  const formulaAnttCadastro =
+    `(${fmtBRL(linhaAntt.ccd)}/km × ${fmtNum(km)} km) + ${fmtBRL(linhaAntt.cc)} (CC) + ${fmtBRL(pedagio)} (pedágio)${servicoAdicionalTexto} — ${linhaAntt.nome ? linhaAntt.nome + " · " : ""}${eixos} eixos (cadastro manual)`;
+
+  state.kmDistancia = km;
+  state.pedagio = pedagio;
+  state.custoAntt = custoAntt;
+  state.custoAprox = custoAprox;
+  state.servicoAdicionalDescricao = servicoAdicionalDescricao;
+  state.servicoAdicionalValor = servicoAdicionalValor;
+  state.valorMercadoria = valorMercadoria;
+  state.eixos = eixos;
+  state.anttNome = linhaAntt.nome || "";
+  state.anttFonte = "cadastro";
+  state.anttCcd = linhaAntt.ccd;
+  state.anttCc = linhaAntt.cc;
+  state.anttFreightCost = null;
+  state.anttLoadUnloadCost = null;
+  state.anttResolucao = null;
+  state.veiculoTipo = veiculo;
+  state.veiculoValorKm = linhaVeiculo.valorKm;
+  state.aproxFonte = spot ? "spot" : "km";
+  state.aproxSpotValor = spot ? spot.valor : null;
+
+  $("resAntt").textContent = fmtBRL(custoAntt);
+  $("resAnttVeiculo").textContent = nomeVeiculoAntt;
+  $("resAnttFormula").textContent = formulaAnttCadastro;
+
+  $("resAprox").textContent = fmtBRL(custoAprox);
+  $("resAproxFormula").textContent = spot
+    ? `${fmtBRL(spot.valor)} (SPOT cadastrado, sem pedágio)${servicoAdicionalTexto} — ${veiculo}`
+    : `(${fmtBRL(linhaVeiculo.valorKm)}/km × ${fmtNum(km)} km) + ${fmtBRL(pedagio)} (pedágio)${servicoAdicionalTexto} — ${veiculo}`;
+
+  $("resultsCard").hidden = false;
+  atualizarComposicao();
+
+  // Se houver chave QualP, busca o piso mínimo ANTT oficial (resolução vigente) e substitui
+  // o cadastro manual. "Sequência" evita que uma resposta atrasada sobrescreva um cálculo mais novo.
+  if (qualpApiKey && km > 0 && eixos >= 2) {
+    const minhaSeq = ++calculoAnttSeq;
+    const resultadoAntt = await calcularAnttQualp(km, eixos, qualpApiKey);
+    if (minhaSeq !== calculoAnttSeq) return; // já rodou outro cálculo depois deste
+
+    if (resultadoAntt) {
+      custoAntt = resultadoAntt.freightCost + resultadoAntt.loadUnloadCost + pedagio + servicoAdicionalValor;
+      state.custoAntt = custoAntt;
+      state.anttFonte = "api";
+      state.anttFreightCost = resultadoAntt.freightCost;
+      state.anttLoadUnloadCost = resultadoAntt.loadUnloadCost;
+      state.anttResolucao = resultadoAntt.resolucao || null;
+      $("resAntt").textContent = fmtBRL(custoAntt);
+      $("resAnttVeiculo").textContent = `— via API QualP${linhaAntt.nome ? " · " + linhaAntt.nome : ""}`;
+      $("resAnttFormula").textContent =
+        `${fmtBRL(resultadoAntt.freightCost)} (frete-peso) + ${fmtBRL(resultadoAntt.loadUnloadCost)} (carga/descarga) + ${fmtBRL(pedagio)} (pedágio)${servicoAdicionalTexto} — ${resultadoAntt.resolucao || "ANTT"} · ${eixos} eixos`;
+      atualizarComposicao();
+    }
+  }
+}
+
+function calcularLinhaComposicao(custoBase, mkp, advalorem, pedagio, aliquota) {
+  if (!mkp) return null;
+  const fretePeso = custoBase / mkp;
+  const subtotal = fretePeso + advalorem + pedagio;
+  if (aliquota === null || aliquota === undefined || aliquota >= 100) {
+    return { fretePeso, advalorem, pedagio, icms: null, total: null };
+  }
+  const total = subtotal / (1 - aliquota / 100);
+  const icms = total - subtotal;
+  return { fretePeso, advalorem, pedagio, icms, total };
+}
+
+function preencherColunaComposicao(prefixo, linha) {
+  $(`comp${prefixo}FretePeso`).textContent = linha ? fmtBRL(linha.fretePeso) : "—";
+  $(`comp${prefixo}Advalorem`).textContent = linha ? fmtBRL(linha.advalorem) : "—";
+  $(`comp${prefixo}Pedagio`).textContent = linha ? fmtBRL(linha.pedagio) : "—";
+  $(`comp${prefixo}Icms`).textContent = linha && linha.icms !== null ? fmtBRL(linha.icms) : "—";
+  $(`comp${prefixo}Total`).textContent = linha && linha.total !== null ? fmtBRL(linha.total) : "—";
+}
+
+function atualizarComposicao() {
+  if ($("resultsCard").hidden) return;
+
+  const { mkp } = calcularMkp();
+  const pctAdval = Number(vendaParams.pctAdvalorem) || 0;
+  const valorMercadoria = parseFloat($("valorMercadoria").value) || 0;
+  const advalorem = valorMercadoria * (pctAdval / 100);
+  const pedagio = state.pedagio || 0;
+
+  // Prioriza a UF resolvida pelo CEP/geocodificação (mais confiável); só recorre a ler o
+  // texto do campo "Cidade" se o KM ainda não foi calculado para este par origem/destino.
+  const ufOrigem = state.ufOrigem || separarCidadeUf($("cidadeOrigem").value).uf;
+  const ufDestino = state.ufDestino || separarCidadeUf($("cidadeDestino").value).uf;
+  const { aliquota, fonte } = obterAliquotaIcms(ufOrigem, ufDestino);
+
+  const linhaAntt = calcularLinhaComposicao(state.custoAntt, mkp, advalorem, pedagio, aliquota);
+  const linhaMerc = calcularLinhaComposicao(state.custoAprox, mkp, advalorem, pedagio, aliquota);
+
+  preencherColunaComposicao("Antt", linhaAntt);
+  preencherColunaComposicao("Merc", linhaMerc);
+
+  state.mkp = mkp;
+  state.pctCustoFixo = Number(vendaParams.pctCustoFixo) || 0;
+  state.pctImpostos = Number(vendaParams.pctImpostos) || 0;
+  state.pctMargem = Number(vendaParams.pctMargem) || 0;
+  state.pctComissao = Number(vendaParams.pctComissao) || 0;
+  state.pctAdvalorem = pctAdval;
+  state.advalorem = advalorem;
+  state.aliquotaIcms = aliquota;
+  state.fonteIcms = fonte;
+  state.compAntt = linhaAntt;
+  state.compMerc = linhaMerc;
+
+  const partes = [`MKP: ${mkp ? fmtNum(mkp, 4) : "indefinido (percentuais somam 100% ou mais)"}`];
+  if (aliquota !== null) {
+    partes.push(`ICMS ${ufOrigem || "?"} → ${ufDestino || "?"}: ${fmtNum(aliquota, 2)}% (${fonte})`);
+  } else {
+    partes.push(`ICMS: ${fonte}`);
+  }
+  $("icmsInfo").textContent = partes.join(" · ");
+}
+
+$("btnCalcular").addEventListener("click", calcular);
+$("valorMercadoria").addEventListener("input", atualizarComposicao);
+
+/* ============================================================
+   Aba Cadastro ANTT — parâmetros da API QualP (Tabela/Carga/Retorno vazio)
+   ============================================================ */
+function renderAnttConfig() {
+  $("anttFreightType").value = anttConfig.freightType;
+  $("anttLoadType").value = anttConfig.loadType;
+  $("anttEmptyReturn").value = anttConfig.isEmptyReturn ? "true" : "false";
+}
+
+$("btnSalvarAnttConfig").addEventListener("click", () => {
+  anttConfig = {
+    freightType: $("anttFreightType").value,
+    loadType: $("anttLoadType").value,
+    isEmptyReturn: $("anttEmptyReturn").value === "true",
+  };
+  saveJSON(STORAGE_KEYS.anttConfig, anttConfig);
+  $("msgAnttConfig").textContent = "Parâmetros salvos.";
+  setTimeout(() => ($("msgAnttConfig").textContent = ""), 2500);
+});
+
+/* ============================================================
+   Aba Cadastro ANTT — tabela manual (reserva sem API)
+   ============================================================ */
+function renderTabelaAntt() {
+  const tbody = $("tabelaAntt").querySelector("tbody");
+  tbody.innerHTML = "";
+  anttTable.forEach((row, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="number" min="1" step="1" value="${row.eixos}" data-field="eixos" data-idx="${idx}"></td>
+      <td><input type="text" value="${row.nome || ""}" placeholder="Nome do veículo" data-field="nome" data-idx="${idx}"></td>
+      <td><input type="number" min="0" step="0.0001" value="${row.ccd}" data-field="ccd" data-idx="${idx}"></td>
+      <td><input type="number" min="0" step="0.01" value="${row.cc}" data-field="cc" data-idx="${idx}"></td>
+      <td><button type="button" class="btn-remove" data-remove="${idx}" title="Remover">&times;</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("input").forEach((inp) => {
+    inp.addEventListener("input", () => {
+      const idx = parseInt(inp.dataset.idx, 10);
+      const field = inp.dataset.field;
+      if (field === "nome") {
+        anttTable[idx][field] = inp.value;
+      } else {
+        anttTable[idx][field] = field === "eixos" ? parseInt(inp.value, 10) || 0 : parseFloat(inp.value) || 0;
+      }
+    });
+  });
+  tbody.querySelectorAll("[data-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      anttTable.splice(parseInt(btn.dataset.remove, 10), 1);
+      renderTabelaAntt();
+    });
+  });
+}
+
+$("btnAddEixo").addEventListener("click", () => {
+  anttTable.push({ eixos: 0, ccd: 0, cc: 0, nome: "" });
+  renderTabelaAntt();
+});
+
+$("btnSalvarAntt").addEventListener("click", () => {
+  saveJSON(STORAGE_KEYS.antt, anttTable);
+  preencherSelects();
+  $("msgAntt").textContent = "Cadastro salvo.";
+  setTimeout(() => ($("msgAntt").textContent = ""), 2500);
+});
+
+/* ============================================================
+   Aba Custo por KM (veículos)
+   ============================================================ */
+function renderTabelaVeiculos() {
+  const tbody = $("tabelaVeiculos").querySelector("tbody");
+  tbody.innerHTML = "";
+  veiculosTable.forEach((row, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="text" value="${row.tipo}" data-field="tipo" data-idx="${idx}"></td>
+      <td><input type="number" min="0" step="0.01" value="${row.valorKm}" data-field="valorKm" data-idx="${idx}"></td>
+      <td><button type="button" class="btn-remove" data-remove="${idx}" title="Remover">&times;</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("input").forEach((inp) => {
+    inp.addEventListener("input", () => {
+      const idx = parseInt(inp.dataset.idx, 10);
+      const field = inp.dataset.field;
+      veiculosTable[idx][field] = field === "valorKm" ? parseFloat(inp.value) || 0 : inp.value;
+    });
+  });
+  tbody.querySelectorAll("[data-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      veiculosTable.splice(parseInt(btn.dataset.remove, 10), 1);
+      renderTabelaVeiculos();
+    });
+  });
+}
+
+$("btnAddVeiculo").addEventListener("click", () => {
+  veiculosTable.push({ tipo: "Novo veículo", valorKm: 0 });
+  renderTabelaVeiculos();
+});
+
+$("btnSalvarVeiculos").addEventListener("click", () => {
+  saveJSON(STORAGE_KEYS.veiculos, veiculosTable);
+  preencherSelects();
+  renderTabelaSpot(); // a lista de veículos do SPOT depende deste cadastro
+  $("msgVeiculos").textContent = "Cadastro salvo.";
+  setTimeout(() => ($("msgVeiculos").textContent = ""), 2500);
+});
+
+/* ============================================================
+   Aba Custo de Operação SPOT (valor fixo por trecho + veículo)
+   ============================================================ */
+function optionsVeiculoSpot(selecionado) {
+  return veiculosTable.map((v) => `<option value="${v.tipo}" ${v.tipo === selecionado ? "selected" : ""}>${v.tipo}</option>`).join("");
+}
+
+function renderTabelaSpot() {
+  const tbody = $("tabelaSpot").querySelector("tbody");
+  tbody.innerHTML = "";
+  spotTable.forEach((row, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>
+        <div class="autocomplete-wrap">
+          <input type="text" value="${row.origem || ""}" placeholder="Digite a cidade" autocomplete="off" data-field="origem" data-idx="${idx}">
+          <ul class="autocomplete-list" hidden></ul>
+        </div>
+      </td>
+      <td>
+        <div class="autocomplete-wrap">
+          <input type="text" value="${row.destino || ""}" placeholder="Digite a cidade" autocomplete="off" data-field="destino" data-idx="${idx}">
+          <ul class="autocomplete-list" hidden></ul>
+        </div>
+      </td>
+      <td><select data-field="veiculo" data-idx="${idx}">${optionsVeiculoSpot(row.veiculo)}</select></td>
+      <td><input type="number" min="0" step="0.01" value="${row.valor}" data-field="valor" data-idx="${idx}"></td>
+      <td><button type="button" class="btn-remove" data-remove="${idx}" title="Remover">&times;</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("input, select").forEach((el) => {
+    el.addEventListener("input", () => {
+      const idx = parseInt(el.dataset.idx, 10);
+      const field = el.dataset.field;
+      spotTable[idx][field] = field === "valor" ? parseFloat(el.value) || 0 : el.value;
+    });
+  });
+
+  // Autocomplete de cidade nas colunas Origem/Destino, igual ao da Calculadora —
+  // evita cadastrar um nome de cidade/UF que nunca vai bater com o trecho calculado.
+  tbody.querySelectorAll("input[data-field='origem'], input[data-field='destino']").forEach((inputEl) => {
+    const listEl = inputEl.closest(".autocomplete-wrap").querySelector(".autocomplete-list");
+    const idx = parseInt(inputEl.dataset.idx, 10);
+    const campo = inputEl.dataset.field;
+    configurarAutocompleteCidadeElementos(inputEl, listEl, (m) => {
+      spotTable[idx][campo] = `${m.nome} - ${m.uf}`;
+    });
+  });
+
+  tbody.querySelectorAll("[data-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      spotTable.splice(parseInt(btn.dataset.remove, 10), 1);
+      renderTabelaSpot();
+    });
+  });
+}
+
+$("btnAddSpot").addEventListener("click", () => {
+  spotTable.push({ origem: "", destino: "", veiculo: veiculosTable[0] ? veiculosTable[0].tipo : "", valor: 0 });
+  renderTabelaSpot();
+});
+
+$("btnSalvarSpot").addEventListener("click", () => {
+  saveJSON(STORAGE_KEYS.spot, spotTable);
+  $("msgSpot").textContent = "Cadastro salvo.";
+  setTimeout(() => ($("msgSpot").textContent = ""), 2500);
+});
+
+function normalizarLocalSpot(s) {
+  return (s || "").trim().toLowerCase();
+}
+
+/** Procura um valor SPOT cadastrado para o trecho (origem → destino) e veículo exatos. */
+function buscarSpot(origemTxt, destinoTxt, veiculo) {
+  const o = normalizarLocalSpot(origemTxt);
+  const d = normalizarLocalSpot(destinoTxt);
+  if (!o || !d) return null;
+  return spotTable.find((r) => normalizarLocalSpot(r.origem) === o && normalizarLocalSpot(r.destino) === d && r.veiculo === veiculo) || null;
+}
+
+/* ============================================================
+   Importar Custo de Operação SPOT de planilha Excel
+   Formato esperado (colunas A/B/C): "Cidade-UF X Cidade-UF" | Tipo | Valor (R$)
+   ============================================================ */
+
+/** Desembrulha o valor de uma célula do ExcelJS (fórmula, rich text ou valor cru). */
+function valorCelulaImportada(v) {
+  if (v instanceof Date) return v;
+  if (v && typeof v === "object") {
+    if ("result" in v) return v.result;
+    if (v.richText) return v.richText.map((t) => t.text).join("");
+  }
+  return v;
+}
+
+/** Capitaliza um tipo de veículo importado (ex.: "van" → "Van", "ctnr" → "CTNR"). */
+function formatarTipoVeiculoImportado(raw) {
+  const s = String(raw).trim();
+  if (/^\d+\/\d+$/.test(s)) return s; // ex.: "3/4"
+  const SIGLAS = { ctnr: "CTNR", vuc: "VUC", dta: "DTA" };
+  return s
+    .split(/\s+/)
+    .map((palavra) => SIGLAS[palavra.toLowerCase()] || palavra.charAt(0).toUpperCase() + palavra.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/** Formata "Cidade-UF" (como vem na planilha) para "Cidade - UF", igual ao padrão do autocomplete. */
+function formatarLocalImportado(parte) {
+  const m = String(parte || "").trim().match(/^(.+)-\s*([A-Za-zÀ-ÿ]{2})$/);
+  if (!m) return null;
+  return `${m[1].trim()} - ${m[2].toUpperCase()}`;
+}
+
+/** Separa "Cidade-UF X Cidade-UF" em { origem, destino }, já formatados. */
+function separarTrechoImportado(trecho) {
+  const m = String(trecho || "").trim().match(/^(.*?)\s+x\s+(.*)$/i);
+  if (!m) return null;
+  const origem = formatarLocalImportado(m[1]);
+  const destino = formatarLocalImportado(m[2]);
+  if (!origem || !destino) return null;
+  return { origem, destino };
+}
+
+async function importarPlanilhaSpot(file) {
+  const buffer = await file.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const ws = workbook.worksheets[0];
+  if (!ws) return { erro: "Planilha vazia ou em formato não reconhecido." };
+
+  let importados = 0;
+  let atualizados = 0;
+  const novosVeiculos = [];
+  const ignorados = [];
+
+  ws.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return; // cabeçalho
+
+    const trechoVal = valorCelulaImportada(row.getCell(1).value);
+    const tipoVal = valorCelulaImportada(row.getCell(2).value);
+    const valorVal = valorCelulaImportada(row.getCell(3).value);
+
+    if (!trechoVal || valorVal === null || valorVal === undefined || valorVal === "") return;
+
+    const partes = separarTrechoImportado(trechoVal);
+    if (!partes) { ignorados.push(`Linha ${rowNumber}: "${trechoVal}" (formato "Cidade-UF X Cidade-UF" não reconhecido)`); return; }
+
+    // Bug clássico do Excel: "3/4" digitado na coluna de tipo vira data (autocorreção). Reconstrói
+    // a fração original a partir do dia/mês em UTC (a data vem sem fuso horário; usar getDate()/
+    // getMonth() locais pode voltar um dia se o fuso local for atrás de UTC).
+    const tipoRaw = tipoVal instanceof Date ? `${tipoVal.getUTCDate()}/${tipoVal.getUTCMonth() + 1}` : tipoVal;
+    if (!tipoRaw) { ignorados.push(`Linha ${rowNumber}: "${trechoVal}" (tipo de veículo vazio)`); return; }
+    const tipo = formatarTipoVeiculoImportado(tipoRaw);
+
+    const valor = Number(valorVal);
+    if (!valor || Number.isNaN(valor)) { ignorados.push(`Linha ${rowNumber}: "${trechoVal}" (valor inválido: "${valorVal}")`); return; }
+
+    // Garante que o tipo de veículo existe no cadastro "Custo por KM" (usado no <select> do SPOT
+    // e na Calculadora); reaproveita a grafia já cadastrada se já existir (case-insensitive).
+    let veiculoExistente = veiculosTable.find((v) => v.tipo.toLowerCase() === tipo.toLowerCase());
+    if (!veiculoExistente) {
+      veiculoExistente = { tipo, valorKm: 0 };
+      veiculosTable.push(veiculoExistente);
+      novosVeiculos.push(tipo);
+    }
+
+    const existente = spotTable.find(
+      (r) =>
+        normalizarLocalSpot(r.origem) === normalizarLocalSpot(partes.origem) &&
+        normalizarLocalSpot(r.destino) === normalizarLocalSpot(partes.destino) &&
+        r.veiculo === veiculoExistente.tipo
+    );
+    if (existente) {
+      existente.valor = valor;
+      atualizados++;
+    } else {
+      spotTable.push({ origem: partes.origem, destino: partes.destino, veiculo: veiculoExistente.tipo, valor });
+      importados++;
+    }
+  });
+
+  saveJSON(STORAGE_KEYS.spot, spotTable);
+  saveJSON(STORAGE_KEYS.veiculos, veiculosTable);
+  renderTabelaSpot();
+  renderTabelaVeiculos();
+  preencherSelects();
+
+  return { importados, atualizados, ignorados, novosVeiculos };
+}
+
+$("btnImportarSpot").addEventListener("click", async () => {
+  const input = $("spotImportFile");
+  const msg = $("msgSpotImport");
+  const file = input.files[0];
+  if (!file) {
+    msg.textContent = "Selecione um arquivo .xlsx primeiro.";
+    return;
+  }
+  msg.textContent = "Importando...";
+  try {
+    const r = await importarPlanilhaSpot(file);
+    if (r.erro) {
+      msg.textContent = r.erro;
+      return;
+    }
+    const partesMsg = [`${r.importados} trecho(s) novo(s)`, `${r.atualizados} atualizado(s)`];
+    if (r.ignorados.length) partesMsg.push(`${r.ignorados.length} linha(s) ignorada(s) por formato inválido (veja o console)`);
+    if (r.novosVeiculos.length) {
+      partesMsg.push(`${r.novosVeiculos.length} novo(s) tipo(s) de veículo criado(s) no Custo por KM: ${r.novosVeiculos.join(", ")}`);
+    }
+    msg.textContent = partesMsg.join(" · ");
+    if (r.ignorados.length) console.warn("Linhas ignoradas na importação SPOT:\n" + r.ignorados.join("\n"));
+    input.value = "";
+  } catch (e) {
+    msg.textContent = "Erro ao importar: " + e.message;
+  }
+});
+
+/* ============================================================
+   Aba Parâmetros de Venda
+   ============================================================ */
+function renderVenda() {
+  $("pctCustoFixo").value = vendaParams.pctCustoFixo;
+  $("pctImpostos").value = vendaParams.pctImpostos;
+  $("pctMargem").value = vendaParams.pctMargem;
+  $("pctComissao").value = vendaParams.pctComissao;
+  $("pctAdvalorem").value = vendaParams.pctAdvalorem;
+  atualizarPreviewVenda();
+}
+
+function atualizarPreviewVenda() {
+  vendaParams.pctCustoFixo = parseFloat($("pctCustoFixo").value) || 0;
+  vendaParams.pctImpostos = parseFloat($("pctImpostos").value) || 0;
+  vendaParams.pctMargem = parseFloat($("pctMargem").value) || 0;
+  vendaParams.pctComissao = parseFloat($("pctComissao").value) || 0;
+  vendaParams.pctAdvalorem = parseFloat($("pctAdvalorem").value) || 0;
+  const { soma, mkp } = calcularMkp();
+  $("somaPct").textContent = fmtNum(soma, 1) + "%";
+  $("mkpValor").textContent = mkp ? fmtNum(mkp, 4) : "indefinido";
+  atualizarComposicao();
+}
+
+["pctCustoFixo", "pctImpostos", "pctMargem", "pctComissao", "pctAdvalorem"].forEach((id) => {
+  $(id).addEventListener("input", atualizarPreviewVenda);
+});
+
+$("btnSalvarVenda").addEventListener("click", () => {
+  saveJSON(STORAGE_KEYS.venda, vendaParams);
+  $("msgVenda").textContent = "Parâmetros salvos.";
+  setTimeout(() => ($("msgVenda").textContent = ""), 2500);
+});
+
+/* ============================================================
+   Aba ICMS (cadastro de exceções por UF origem/destino)
+   ============================================================ */
+function optionsUf(selecionado) {
+  return UF_LIST.map((uf) => `<option value="${uf}" ${uf === selecionado ? "selected" : ""}>${uf}</option>`).join("");
+}
+
+function preencherFiltroIcms() {
+  const sel = $("filtroIcmsOrigem");
+  const atual = sel.value;
+  sel.innerHTML = `<option value="">Todas as UFs (729 linhas)</option>` + UF_LIST.map((uf) => `<option value="${uf}">${uf}</option>`).join("");
+  sel.value = atual || "";
+}
+
+function renderTabelaIcms() {
+  const tbody = $("tabelaIcms").querySelector("tbody");
+  tbody.innerHTML = "";
+  const filtro = $("filtroIcmsOrigem").value;
+
+  icmsTable.forEach((row, idx) => {
+    if (filtro && row.ufOrigem !== filtro) return;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><select data-field="ufOrigem" data-idx="${idx}">${optionsUf(row.ufOrigem)}</select></td>
+      <td><select data-field="ufDestino" data-idx="${idx}">${optionsUf(row.ufDestino)}</select></td>
+      <td><input type="number" min="0" max="99" step="0.01" value="${row.aliquota}" data-field="aliquota" data-idx="${idx}"></td>
+      <td><button type="button" class="btn-remove" data-remove="${idx}" title="Remover">&times;</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("select, input").forEach((el) => {
+    el.addEventListener("input", () => {
+      const idx = parseInt(el.dataset.idx, 10);
+      const field = el.dataset.field;
+      icmsTable[idx][field] = field === "aliquota" ? parseFloat(el.value) || 0 : el.value;
+      if (field === "ufOrigem") renderTabelaIcms(); // pode sair do filtro atual
+    });
+  });
+  tbody.querySelectorAll("[data-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      icmsTable.splice(parseInt(btn.dataset.remove, 10), 1);
+      renderTabelaIcms();
+    });
+  });
+}
+
+$("filtroIcmsOrigem").addEventListener("change", renderTabelaIcms);
+
+$("btnAddIcms").addEventListener("click", () => {
+  icmsTable.push({ ufOrigem: "SP", ufDestino: "SP", aliquota: 0 });
+  renderTabelaIcms();
+});
+
+$("btnSalvarIcms").addEventListener("click", () => {
+  saveJSON(STORAGE_KEYS.icms, icmsTable);
+  atualizarComposicao();
+  $("msgIcms").textContent = "Cadastro salvo.";
+  setTimeout(() => ($("msgIcms").textContent = ""), 2500);
+});
+
+/* ============================================================
+   Aba Rota (chave OpenRouteService — perfil de caminhão/HGV)
+   ============================================================ */
+$("btnSalvarOrs").addEventListener("click", () => {
+  orsApiKey = $("orsApiKey").value.trim();
+  saveJSON(STORAGE_KEYS.orsApiKey, orsApiKey);
+  $("msgOrs").textContent = orsApiKey ? "Chave salva." : "Chave removida.";
+  setTimeout(() => ($("msgOrs").textContent = ""), 2500);
+});
+
+$("btnLimparOrs").addEventListener("click", () => {
+  orsApiKey = "";
+  $("orsApiKey").value = "";
+  saveJSON(STORAGE_KEYS.orsApiKey, "");
+  $("msgOrs").textContent = "Chave removida.";
+  setTimeout(() => ($("msgOrs").textContent = ""), 2500);
+});
+
+$("btnSalvarQualp").addEventListener("click", () => {
+  qualpApiKey = $("qualpApiKey").value.trim();
+  saveJSON(STORAGE_KEYS.qualpApiKey, qualpApiKey);
+  $("msgQualp").textContent = qualpApiKey ? "Chave salva." : "Chave removida.";
+  setTimeout(() => ($("msgQualp").textContent = ""), 2500);
+});
+
+$("btnLimparQualp").addEventListener("click", () => {
+  qualpApiKey = "";
+  $("qualpApiKey").value = "";
+  saveJSON(STORAGE_KEYS.qualpApiKey, "");
+  $("msgQualp").textContent = "Chave removida.";
+  setTimeout(() => ($("msgQualp").textContent = ""), 2500);
+});
+
+/* ============================================================
+   Aba Vendedores
+   ============================================================ */
+function renderTabelaVendedores() {
+  const tbody = $("tabelaVendedores").querySelector("tbody");
+  tbody.innerHTML = "";
+  vendedoresTable.forEach((row, idx) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="text" value="${row.nome || ""}" placeholder="Nome do vendedor" data-idx="${idx}"></td>
+      <td><button type="button" class="btn-remove" data-remove="${idx}" title="Remover">&times;</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("input").forEach((inp) => {
+    inp.addEventListener("input", () => {
+      vendedoresTable[parseInt(inp.dataset.idx, 10)].nome = inp.value;
+    });
+  });
+  tbody.querySelectorAll("[data-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      vendedoresTable.splice(parseInt(btn.dataset.remove, 10), 1);
+      renderTabelaVendedores();
+    });
+  });
+}
+
+function preencherSelectVendedor() {
+  const sel = $("vendedorSelecionado");
+  const atual = sel.value;
+  const nomes = vendedoresTable.map((v) => v.nome).filter(Boolean);
+  if (!nomes.length) {
+    sel.innerHTML = `<option value="">Nenhum vendedor cadastrado</option>`;
+    $("vendedorAviso").textContent = 'Cadastre vendedores na aba "Vendedores" para selecionar aqui.';
+  } else {
+    sel.innerHTML = nomes.map((n) => `<option value="${n}">${n}</option>`).join("");
+    if (nomes.includes(atual)) sel.value = atual;
+    $("vendedorAviso").textContent = "";
+  }
+}
+
+$("btnAddVendedor").addEventListener("click", () => {
+  vendedoresTable.push({ nome: "" });
+  renderTabelaVendedores();
+});
+
+$("btnSalvarVendedores").addEventListener("click", () => {
+  vendedoresTable = vendedoresTable.filter((v) => v.nome && v.nome.trim());
+  saveJSON(STORAGE_KEYS.vendedores, vendedoresTable);
+  renderTabelaVendedores();
+  preencherSelectVendedor();
+  $("msgVendedores").textContent = "Cadastro salvo.";
+  setTimeout(() => ($("msgVendedores").textContent = ""), 2500);
+});
+
+/* ============================================================
+   Aba Histórico (cotações salvas)
+   ============================================================ */
+function fmtDataHora(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function renderHistorico() {
+  const tbody = $("tabelaHistorico").querySelector("tbody");
+  tbody.innerHTML = "";
+  const lista = [...historicoCotacoes].sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm));
+
+  $("historicoVazio").hidden = lista.length > 0;
+  $("tabelaHistorico").closest(".tabela-scroll").hidden = lista.length === 0;
+
+  lista.forEach((c) => {
+    const tr = document.createElement("tr");
+    tr.dataset.cotacaoId = c.id;
+    tr.innerHTML = `
+      <td>${c.numeroFormatado ? `<span class="numero-cotacao-link" data-dre-cotacao="${c.id}">${c.numeroFormatado}</span>` : "—"}</td>
+      <td>${fmtDataHora(c.criadoEm)}</td>
+      <td>${c.vendedor || "—"}</td>
+      <td>${c.origem || "—"}</td>
+      <td>${c.destino || "—"}</td>
+      <td>${fmtNum(c.km, 1)}</td>
+      <td>${fmtBRL(c.pedagio)}</td>
+      <td>${fmtBRL(c.valorMercadoria)}</td>
+      <td>${fmtBRL(c.totalAntt)}</td>
+      <td>${fmtBRL(c.totalMerc)}</td>
+      <td><button type="button" class="btn-remove" data-remove-cotacao="${c.id}" title="Remover">&times;</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("[data-remove-cotacao]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      historicoCotacoes = historicoCotacoes.filter((c) => c.id !== btn.dataset.removeCotacao);
+      saveJSON(STORAGE_KEYS.historico, historicoCotacoes);
+      renderHistorico();
+    });
+  });
+
+  tbody.querySelectorAll("tr[data-cotacao-id]").forEach((tr) => {
+    tr.addEventListener("click", () => abrirDetalheCotacao(tr.dataset.cotacaoId));
+  });
+
+  tbody.querySelectorAll("[data-dre-cotacao]").forEach((link) => {
+    link.addEventListener("click", (e) => {
+      e.stopPropagation();
+      abrirDreProjetado(link.dataset.dreCotacao);
+    });
+  });
+}
+
+const NOMES_FONTE_KM = {
+  qualp: "API QualP",
+  "rota-caminhao": "OpenRouteService (perfil caminhão)",
+  rota: "OSRM (rota rodoviária)",
+  estimativa: "Estimativa (linha reta × fator)",
+};
+
+function linhaSecao(titulo) {
+  return `<tr class="detalhe-secao"><td colspan="2">${titulo}</td></tr>`;
+}
+function linhaCampo(rotulo, valor) {
+  return `<tr><td>${rotulo}</td><td>${valor ?? "—"}</td></tr>`;
+}
+
+function abrirDetalheCotacao(id) {
+  const c = historicoCotacoes.find((item) => item.id === id);
+  if (!c) return;
+
+  // Cotações salvas antes desta atualização do histórico não têm os campos detalhados
+  // (markup, ICMS, composição, fonte do KM/ANTT). Mostrar "0" ou "indefinido" nesse caso
+  // seria enganoso — em vez disso, avisamos que o dado não foi capturado na época.
+  const legado = !("mkp" in c);
+  const NAO_DISPONIVEL = "não disponível (cotação salva antes desta atualização)";
+
+  const partes = [];
+
+  partes.push(linhaSecao("Geral"));
+  partes.push(linhaCampo("Nº Cotação", c.numeroFormatado || "—"));
+  partes.push(linhaCampo("Data/Hora", fmtDataHora(c.criadoEm)));
+  partes.push(linhaCampo("Vendedor", c.vendedor || "—"));
+
+  partes.push(linhaSecao("Origem / Destino"));
+  partes.push(linhaCampo("CEP Origem", c.cepOrigem || "—"));
+  partes.push(linhaCampo("Cidade Origem", c.origem || "—"));
+  partes.push(linhaCampo("CEP Destino", c.cepDestino || "—"));
+  partes.push(linhaCampo("Cidade Destino", c.destino || "—"));
+  partes.push(linhaCampo("UF Origem → UF Destino", `${c.ufOrigem || "?"} → ${c.ufDestino || "?"}`));
+
+  partes.push(linhaSecao("Rota"));
+  partes.push(linhaCampo("Km (final)", `${fmtNum(c.km, 1)} km`));
+  if (!legado && c.ajusteKmPct) {
+    partes.push(linhaCampo("Km bruto (antes do ajuste)", c.kmBruto != null ? `${fmtNum(c.kmBruto, 1)} km` : "—"));
+    partes.push(linhaCampo("Ajuste de rota aplicado", `${c.ajusteKmPct > 0 ? "+" : ""}${fmtNum(c.ajusteKmPct, 1)}%`));
+  }
+
+  partes.push(linhaSecao("Operação"));
+  partes.push(linhaCampo("Quantidade de Eixos", `${c.eixos ?? "—"} eixos${c.nomeVeiculoAntt ? " — " + c.nomeVeiculoAntt : ""}`));
+  partes.push(linhaCampo("Tipo de Veículo (Mercado)", `${c.tipoVeiculoMercado || "—"}${c.veiculoValorKm ? ` (${fmtBRL(c.veiculoValorKm)}/km)` : ""}`));
+  if (!legado) {
+    partes.push(linhaCampo(
+      "Fonte do Custo Aproximado",
+      c.aproxFonte === "spot" ? `SPOT cadastrado (${fmtBRL(c.aproxSpotValor)})` : "Custo por KM (cadastro)"
+    ));
+  }
+  partes.push(linhaCampo("Valor da Mercadoria", fmtBRL(c.valorMercadoria)));
+
+  partes.push(linhaSecao("Custo ANTT (piso mínimo)"));
+  if (legado) {
+    partes.push(linhaCampo("Fonte (cadastro/API)", NAO_DISPONIVEL));
+  } else {
+    partes.push(linhaCampo("Fonte", c.anttFonte === "api" ? "API QualP (resolução vigente)" : "Cadastro manual"));
+    if (c.anttFonte === "api") {
+      partes.push(linhaCampo("Frete-peso (API)", fmtBRL(c.anttFreightCost)));
+      partes.push(linhaCampo("Carga/Descarga (API)", fmtBRL(c.anttLoadUnloadCost)));
+      partes.push(linhaCampo("Resolução ANTT", c.anttResolucao || "—"));
+    } else {
+      partes.push(linhaCampo("CCD (R$/km)", fmtBRL(c.anttCcd)));
+      partes.push(linhaCampo("CC (R$ fixo)", fmtBRL(c.anttCc)));
+    }
+  }
+  partes.push(linhaCampo("Custo ANTT (operação, sem markup)", fmtBRL(c.custoAntt)));
+  partes.push(linhaCampo("Custo Aproximado (operação, sem markup)", fmtBRL(c.custoAprox)));
+  if (c.servicoAdicionalValor) {
+    partes.push(linhaCampo("Serviço Adicional", `${fmtBRL(c.servicoAdicionalValor)}${c.servicoAdicionalDescricao ? " — " + c.servicoAdicionalDescricao : ""}`));
+  }
+
+  partes.push(linhaSecao("Markup / Ad Valorem"));
+  if (legado) {
+    partes.push(linhaCampo("Detalhes de markup", NAO_DISPONIVEL));
+  } else {
+    partes.push(linhaCampo("% Custo Fixo", `${fmtNum(c.pctCustoFixo, 1)}%`));
+    partes.push(linhaCampo("% Impostos Federais", `${fmtNum(c.pctImpostos, 1)}%`));
+    partes.push(linhaCampo("% Margem Esperada", `${fmtNum(c.pctMargem, 1)}%`));
+    partes.push(linhaCampo("% Comissão", `${fmtNum(c.pctComissao, 1)}%`));
+    partes.push(linhaCampo("MKP utilizado", c.mkp ? fmtNum(c.mkp, 4) : "indefinido"));
+    partes.push(linhaCampo("% Ad Valorem", `${fmtNum(c.pctAdvalorem, 2)}%`));
+  }
+
+  partes.push(linhaSecao("ICMS"));
+  if (legado) {
+    partes.push(linhaCampo("Alíquota / fonte", NAO_DISPONIVEL));
+  } else {
+    partes.push(linhaCampo("Alíquota aplicada", c.aliquotaIcms != null ? `${fmtNum(c.aliquotaIcms, 2)}%` : "indefinida"));
+    partes.push(linhaCampo("Fonte da alíquota", c.fonteIcms || "—"));
+  }
+
+  partes.push(linhaSecao("Composição Final — ANTT"));
+  if (legado) {
+    partes.push(linhaCampo("Frete Peso / Ad Valorem / ICMS", NAO_DISPONIVEL));
+    partes.push(linhaCampo("Pedágio", fmtBRL(c.pedagio)));
+    partes.push(linhaCampo("Total Venda", fmtBRL(c.totalAntt)));
+  } else {
+    partes.push(linhaCampo("Frete Peso", fmtBRL(c.fretePesoAntt)));
+    partes.push(linhaCampo("Ad Valorem", fmtBRL(c.advalorem)));
+    partes.push(linhaCampo("Pedágio", fmtBRL(c.pedagio)));
+    partes.push(linhaCampo("ICMS", fmtBRL(c.icmsAntt)));
+    partes.push(linhaCampo("Total Venda", fmtBRL(c.totalAntt)));
+  }
+
+  partes.push(linhaSecao("Composição Final — Mercado"));
+  if (legado) {
+    partes.push(linhaCampo("Frete Peso / Ad Valorem / ICMS", NAO_DISPONIVEL));
+    partes.push(linhaCampo("Pedágio", fmtBRL(c.pedagio)));
+    partes.push(linhaCampo("Total Venda", fmtBRL(c.totalMerc)));
+  } else {
+    partes.push(linhaCampo("Frete Peso", fmtBRL(c.fretePesoMerc)));
+    partes.push(linhaCampo("Ad Valorem", fmtBRL(c.advalorem)));
+    partes.push(linhaCampo("Pedágio", fmtBRL(c.pedagio)));
+    partes.push(linhaCampo("ICMS", fmtBRL(c.icmsMerc)));
+    partes.push(linhaCampo("Total Venda", fmtBRL(c.totalMerc)));
+  }
+
+  $("detalheCotacaoTabela").innerHTML = partes.join("");
+  $("detalheCotacaoOverlay").hidden = false;
+}
+
+$("btnFecharDetalheCotacao").addEventListener("click", () => {
+  $("detalheCotacaoOverlay").hidden = true;
+});
+$("detalheCotacaoOverlay").addEventListener("click", (e) => {
+  if (e.target === $("detalheCotacaoOverlay")) $("detalheCotacaoOverlay").hidden = true;
+});
+
+/* ============================================================
+   DRE Projetado (aberto a partir do número da cotação no Histórico)
+   ============================================================ */
+const PCT_SEGURO = 0.0004; // 0,04% do valor da mercadoria
+
+/**
+ * Monta o DRE de um lado (ANTT ou Mercado) a partir dos dados já salvos na cotação.
+ * "custoContratacao" é o custo puro do transporte (CCD×km+CC, valor do SPOT cadastrado, ou
+ * R$/km×km), sempre SEM pedágio e SEM serviço adicional — cada um entra à parte, como sua
+ * própria linha, para não ser contado duas vezes.
+ */
+function calcularDreLado(freteTotal, custoOperacao, icmsRS, pedagio, valorMercadoria, pctImpostos, pctComissao, pctCustoFixo, servicoAdicionalValor, servicoAdicionalDescricao) {
+  const impostosFederais = freteTotal * (pctImpostos / 100);
+  const icms = Number(icmsRS) || 0;
+  const rob = freteTotal - impostosFederais - icms;
+
+  const servicoAdicional = Number(servicoAdicionalValor) || 0;
+
+  // custoOperacao já inclui o pedágio e o serviço adicional (é o custo cheio usado na
+  // Calculadora) — separa aqui em "Custo da Contratação" (sem pedágio, sem serviço adicional)
+  // + "Pedágio" + "Custo Extra" (cada um com sua própria linha), que somados voltam a fechar
+  // exatamente no custoOperacao. Nada é contado 2x.
+  const custoContratacao = Math.max((Number(custoOperacao) || 0) - (Number(pedagio) || 0) - servicoAdicional, 0);
+  const custoSeguro = (Number(valorMercadoria) || 0) * PCT_SEGURO;
+  const comissao = (freteTotal - icms) * (pctComissao / 100);
+  const custoVariavel = custoContratacao + pedagio + servicoAdicional + custoSeguro + comissao;
+
+  const receitaOperacionalLiquida = rob - custoVariavel;
+
+  const custoFixo = freteTotal * (pctCustoFixo / 100);
+  const resultado = receitaOperacionalLiquida - custoFixo;
+  const resultadoPct = freteTotal ? (resultado / freteTotal) * 100 : 0;
+
+  return {
+    freteTotal, impostosFederais, icms, rob,
+    custoContratacao, pedagio, servicoAdicional, servicoAdicionalDescricao: servicoAdicionalDescricao || "",
+    custoSeguro, comissao, custoVariavel,
+    receitaOperacionalLiquida, custoFixo, resultado, resultadoPct,
+  };
+}
+
+function linhaDre(rotulo, valor, classe) {
+  return `<tr class="${classe || ""}"><td>${rotulo}</td><td>${fmtBRL(valor)}</td></tr>`;
+}
+
+function preencherTabelaDre(elId, d) {
+  const rotuloExtra = `Custo Extra${d.servicoAdicionalDescricao ? " — " + d.servicoAdicionalDescricao : ""}`;
+  const linhas = [
+    linhaDre("Frete Total", d.freteTotal),
+    linhaDre("(&minus;) Impostos Federais", -d.impostosFederais),
+    linhaDre("(&minus;) ICMS", -d.icms),
+    linhaDre("(=) ROB", d.rob, "dre-subtotal"),
+    linhaDre("Custo da Contratação", -d.custoContratacao, "dre-subitem"),
+    linhaDre("Pedágio", -d.pedagio, "dre-subitem"),
+    linhaDre(rotuloExtra, -d.servicoAdicional, "dre-subitem"),
+    linhaDre("Custo com Seguro (0,04% da mercadoria)", -d.custoSeguro, "dre-subitem"),
+    linhaDre("Comissão", -d.comissao, "dre-subitem"),
+    linhaDre("(=) Custo Variável", -d.custoVariavel, "dre-subtotal"),
+    linhaDre("(=) Receita Operacional Líquida", d.receitaOperacionalLiquida, "dre-subtotal"),
+    linhaDre("(&minus;) Custo Fixo", -d.custoFixo),
+    linhaDre("(=) Resultado", d.resultado, `dre-resultado${d.resultado < 0 ? " dre-negativo" : ""}`),
+    `<tr class="dre-resultado-pct${d.resultado < 0 ? " dre-negativo" : ""}"><td></td><td>${fmtNum(d.resultadoPct, 2)}% do faturamento</td></tr>`,
+  ];
+  $(elId).innerHTML = linhas.join("");
+}
+
+let dreAtualCotacaoId = null;
+
+function abrirDreProjetado(id) {
+  const c = historicoCotacoes.find((item) => item.id === id);
+  if (!c) return;
+
+  dreAtualCotacaoId = id;
+  $("dreNumeroCotacao").textContent = `— Cotação Nº ${c.numeroFormatado}`;
+
+  const legado = !("mkp" in c);
+  $("btnExportarDreExcel").hidden = legado;
+  if (legado) {
+    $("dreSubtitulo").textContent = `${c.origem || "?"} → ${c.destino || "?"} · DRE não disponível (cotação salva antes desta atualização — faltam percentuais e ICMS detalhados).`;
+    $("dreTabelaAntt").innerHTML = "";
+    $("dreTabelaMerc").innerHTML = "";
+    ativarAba("dre");
+    return;
+  }
+
+  $("dreSubtitulo").textContent = `${c.origem || "?"} → ${c.destino || "?"} · ${fmtDataHora(c.criadoEm)} · Vendedor: ${c.vendedor || "—"}`;
+
+  const dAntt = calcularDreLado(c.totalAntt, c.custoAntt, c.icmsAntt, c.pedagio, c.valorMercadoria, c.pctImpostos, c.pctComissao, c.pctCustoFixo, c.servicoAdicionalValor, c.servicoAdicionalDescricao);
+  const dMerc = calcularDreLado(c.totalMerc, c.custoAprox, c.icmsMerc, c.pedagio, c.valorMercadoria, c.pctImpostos, c.pctComissao, c.pctCustoFixo, c.servicoAdicionalValor, c.servicoAdicionalDescricao);
+
+  preencherTabelaDre("dreTabelaAntt", dAntt);
+  preencherTabelaDre("dreTabelaMerc", dMerc);
+
+  ativarAba("dre");
+}
+
+$("btnVoltarHistorico").addEventListener("click", () => ativarAba("historico"));
+
+/**
+ * Exporta o DRE Projetado para .xlsx com FÓRMULAS de verdade (não valores fixos), para poder
+ * auditar: os "Dados de entrada" ficam em células separadas, e cada linha do DRE (Impostos,
+ * ICMS, ROB, Custo Variável, Resultado etc.) é uma fórmula do Excel referenciando essas
+ * células — dá pra abrir, clicar numa célula e ver exatamente de onde veio o número, ou até
+ * mudar um percentual e ver o resultado recalcular sozinho.
+ */
+async function exportarDreExcel() {
+  const c = historicoCotacoes.find((item) => item.id === dreAtualCotacaoId);
+  if (!c || !("mkp" in c)) return;
+
+  const workbook = new ExcelJS.Workbook();
+  const ws = workbook.addWorksheet("DRE");
+  ws.columns = [{ width: 34 }, { width: 18 }, { width: 18 }];
+
+  const brl = "R$ #,##0.00;[RED]-R$ #,##0.00";
+  const pct = "0.00%";
+
+  function linha(rowNum, rotulo, valB, valC, opts = {}) {
+    const row = ws.getRow(rowNum);
+    row.getCell(1).value = rotulo;
+    row.getCell(2).value = valB;
+    row.getCell(3).value = valC;
+    if (opts.negrito) row.font = { bold: true };
+    if (opts.formato) {
+      row.getCell(2).numFmt = opts.formato;
+      row.getCell(3).numFmt = opts.formato;
+    }
+    return row;
+  }
+
+  ws.mergeCells("A1:C1");
+  ws.getCell("A1").value = `DRE Projetado — Cotação Nº ${c.numeroFormatado}`;
+  ws.getCell("A1").font = { bold: true, size: 14 };
+
+  ws.mergeCells("A2:C2");
+  ws.getCell("A2").value = `${c.origem || "?"} → ${c.destino || "?"} · ${fmtDataHora(c.criadoEm)} · Vendedor: ${c.vendedor || "—"}`;
+  ws.getCell("A2").font = { italic: true, color: { argb: "FF6B7686" } };
+
+  linha(4, "", "Baseado no Custo ANTT", "Baseado no Custo de Mercado", { negrito: true });
+
+  linha(5, "Dados de entrada", null, null, { negrito: true });
+  // Inputs (valores azuis = vêm direto da cotação salva, não são calculados aqui)
+  const custoExtraDescricao = c.servicoAdicionalDescricao ? ` — ${c.servicoAdicionalDescricao}` : "";
+  linha(6, "Custo da Operação (com pedágio e custo extra)", c.custoAntt, c.custoAprox, { formato: brl });
+  linha(7, "Pedágio", c.pedagio, c.pedagio, { formato: brl });
+  linha(8, `Custo Extra${custoExtraDescricao}`, c.servicoAdicionalValor || 0, c.servicoAdicionalValor || 0, { formato: brl });
+  linha(9, "Valor da Mercadoria", c.valorMercadoria, c.valorMercadoria, { formato: brl });
+  linha(10, "ICMS (R$)", c.icmsAntt, c.icmsMerc, { formato: brl });
+  linha(11, "% Impostos Federais", (c.pctImpostos || 0) / 100, (c.pctImpostos || 0) / 100, { formato: pct });
+  linha(12, "% Comissão", (c.pctComissao || 0) / 100, (c.pctComissao || 0) / 100, { formato: pct });
+  linha(13, "% Custo Fixo", (c.pctCustoFixo || 0) / 100, (c.pctCustoFixo || 0) / 100, { formato: pct });
+  [6, 7, 8, 9, 10, 11, 12, 13].forEach((r) => {
+    ws.getCell(`B${r}`).font = { color: { argb: "FF1D5DB1" } };
+    ws.getCell(`C${r}`).font = { color: { argb: "FF1D5DB1" } };
+  });
+
+  linha(15, "Cálculo do DRE", null, null, { negrito: true });
+
+  linha(16, "Frete Total", c.totalAntt, c.totalMerc, { formato: brl });
+  ws.getCell("B16").font = { color: { argb: "FF1D5DB1" } };
+  ws.getCell("C16").font = { color: { argb: "FF1D5DB1" } };
+
+  linha(17, "(-) Impostos Federais", { formula: "-B16*B11" }, { formula: "-C16*C11" }, { formato: brl });
+  linha(18, "(-) ICMS", { formula: "-B10" }, { formula: "-C10" }, { formato: brl });
+  linha(19, "(=) ROB", { formula: "SUM(B16:B18)" }, { formula: "SUM(C16:C18)" }, { negrito: true, formato: brl });
+
+  linha(20, "Custo da Contratação", { formula: "-(B6-B7-B8)" }, { formula: "-(C6-C7-C8)" }, { formato: brl });
+  linha(21, "Pedágio", { formula: "-B7" }, { formula: "-C7" }, { formato: brl });
+  linha(22, `Custo Extra${custoExtraDescricao}`, { formula: "-B8" }, { formula: "-C8" }, { formato: brl });
+  linha(23, "Custo com Seguro (0,04% da mercadoria)", { formula: "-B9*0.0004" }, { formula: "-C9*0.0004" }, { formato: brl });
+  linha(24, "Comissão", { formula: "-(B16-B10)*B12" }, { formula: "-(C16-C10)*C12" }, { formato: brl });
+  linha(25, "(=) Custo Variável", { formula: "SUM(B20:B24)" }, { formula: "SUM(C20:C24)" }, { negrito: true, formato: brl });
+
+  linha(26, "(=) Receita Operacional Líquida", { formula: "B19+B25" }, { formula: "C19+C25" }, { negrito: true, formato: brl });
+
+  linha(27, "(-) Custo Fixo", { formula: "-B16*B13" }, { formula: "-C16*C13" }, { formato: brl });
+  linha(28, "(=) Resultado", { formula: "B26+B27" }, { formula: "C26+C27" }, { negrito: true, formato: brl });
+  linha(29, "Resultado % do Faturamento", { formula: "B28/B16" }, { formula: "C28/C16" }, { formato: pct });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `dre-cotacao-${c.numeroFormatado.replace("/", "-")}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+$("btnExportarDreExcel").addEventListener("click", () => {
+  exportarDreExcel();
+  $("msgDreExcel").textContent = "Excel exportado.";
+  setTimeout(() => ($("msgDreExcel").textContent = ""), 2500);
+});
+
+function salvarCotacao() {
+  if ($("resultsCard").hidden) return;
+
+  const agora = new Date();
+  const ano = agora.getFullYear();
+  const numero = proximoNumeroCotacao(ano);
+
+  const registro = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    numero,
+    ano,
+    numeroFormatado: `${numero}/${ano}`,
+    criadoEm: agora.toISOString(),
+    vendedor: $("vendedorSelecionado").value || "",
+
+    // Origem / Destino
+    cepOrigem: $("cepOrigem").value.trim(),
+    origem: $("cidadeOrigem").value.trim(),
+    cepDestino: $("cepDestino").value.trim(),
+    destino: $("cidadeDestino").value.trim(),
+    ufOrigem: state.ufOrigem || "",
+    ufDestino: state.ufDestino || "",
+
+    // Rota / KM
+    km: state.kmDistancia || 0,
+    kmBruto: state.kmBruto,
+    fonteKm: state.fonteKm,
+    ajusteKmPct: state.ajusteKmPct || 0,
+    pedagio: state.pedagio || 0,
+
+    // Operação
+    eixos: state.eixos,
+    nomeVeiculoAntt: state.anttNome || "",
+    tipoVeiculoMercado: state.veiculoTipo || "",
+    veiculoValorKm: state.veiculoValorKm || 0,
+    aproxFonte: state.aproxFonte || "km",
+    aproxSpotValor: state.aproxSpotValor,
+    valorMercadoria: state.valorMercadoria || 0,
+    servicoAdicionalDescricao: state.servicoAdicionalDescricao || "",
+    servicoAdicionalValor: state.servicoAdicionalValor || 0,
+
+    // Custo ANTT (fonte: cadastro manual ou API QualP)
+    anttFonte: state.anttFonte,
+    anttCcd: state.anttCcd || 0,
+    anttCc: state.anttCc || 0,
+    anttFreightCost: state.anttFreightCost,
+    anttLoadUnloadCost: state.anttLoadUnloadCost,
+    anttResolucao: state.anttResolucao,
+    custoAntt: state.custoAntt || 0,
+    custoAprox: state.custoAprox || 0,
+
+    // Markup / Ad Valorem
+    mkp: state.mkp,
+    pctCustoFixo: state.pctCustoFixo || 0,
+    pctImpostos: state.pctImpostos || 0,
+    pctMargem: state.pctMargem || 0,
+    pctComissao: state.pctComissao || 0,
+    pctAdvalorem: state.pctAdvalorem || 0,
+    advalorem: state.advalorem || 0,
+
+    // ICMS
+    aliquotaIcms: state.aliquotaIcms,
+    fonteIcms: state.fonteIcms || "",
+
+    // Composição final (ANTT e Mercado)
+    fretePesoAntt: state.compAntt ? state.compAntt.fretePeso : null,
+    icmsAntt: state.compAntt ? state.compAntt.icms : null,
+    totalAntt: state.compAntt ? state.compAntt.total : null,
+    fretePesoMerc: state.compMerc ? state.compMerc.fretePeso : null,
+    icmsMerc: state.compMerc ? state.compMerc.icms : null,
+    totalMerc: state.compMerc ? state.compMerc.total : null,
+  };
+
+  historicoCotacoes.push(registro);
+  saveJSON(STORAGE_KEYS.historico, historicoCotacoes);
+  renderHistorico();
+  $("msgCotacao").textContent = `Cotação nº ${registro.numeroFormatado} salva no histórico.`;
+  setTimeout(() => ($("msgCotacao").textContent = ""), 3500);
+
+  limparFormularioParaNovaCotacao();
+}
+
+/** Volta a Calculadora ao estado inicial depois de salvar, pronta para uma nova cotação. */
+function limparFormularioParaNovaCotacao() {
+  ["cepOrigem", "cidadeOrigem", "cepDestino", "cidadeDestino"].forEach((id) => {
+    $(id).value = "";
+  });
+  $("feedbackOrigem").textContent = "";
+  $("feedbackOrigem").className = "address-feedback";
+  $("feedbackDestino").textContent = "";
+  $("feedbackDestino").className = "address-feedback";
+
+  $("kmDistancia").value = "";
+  $("kmInfo").textContent = "";
+  $("pedagio").value = "0";
+  $("pedagioInfo").textContent = "";
+  $("valorMercadoria").value = "0";
+  $("qtdEixos").selectedIndex = 0;
+  $("tipoVeiculo").selectedIndex = 0;
+  $("servicoAdicionalDescricao").value = "";
+  $("servicoAdicionalValor").value = "0";
+
+  ultimoKmBruto = null;
+  ultimaFonteKm = null;
+
+  state.kmDistancia = 0;
+  state.pedagio = 0;
+  state.custoAntt = 0;
+  state.custoAprox = 0;
+  state.servicoAdicionalDescricao = "";
+  state.servicoAdicionalValor = 0;
+  state.ufOrigem = "";
+  state.ufDestino = "";
+  state.valorMercadoria = 0;
+  state.eixos = null;
+
+  $("resultsCard").hidden = true;
+  $("spotInfoBox").hidden = true;
+}
+
+$("btnSalvarCotacao").addEventListener("click", salvarCotacao);
+
+$("btnExportarHistorico").addEventListener("click", () => {
+  if (!historicoCotacoes.length) return;
+  const colunas = [
+    "Nº Cotação", "Data/Hora", "Vendedor", "CEP Origem", "Origem", "CEP Destino", "Destino", "UF Origem", "UF Destino",
+    "Km", "Km Bruto", "Fonte Km", "Ajuste Km %", "Pedágio",
+    "Eixos", "Veículo ANTT", "Veículo Mercado", "R$/km Mercado", "Fonte Custo Aprox.", "Valor SPOT", "Valor Mercadoria",
+    "Fonte ANTT", "CCD", "CC", "Frete-peso API", "Carga/Descarga API", "Resolução ANTT",
+    "Custo ANTT (operação)", "Custo Aprox. (operação)", "Serviço Adicional (descrição)", "Serviço Adicional (R$)",
+    "% Custo Fixo", "% Impostos", "% Margem", "% Comissão", "MKP", "% Ad Valorem", "Ad Valorem (R$)",
+    "Alíquota ICMS", "Fonte ICMS",
+    "Frete Peso ANTT", "ICMS ANTT", "Total ANTT",
+    "Frete Peso Mercado", "ICMS Mercado", "Total Mercado",
+  ];
+  const linhas = [...historicoCotacoes]
+    .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm))
+    .map((c) => [
+      c.numeroFormatado, fmtDataHora(c.criadoEm), c.vendedor, c.cepOrigem, c.origem, c.cepDestino, c.destino, c.ufOrigem, c.ufDestino,
+      c.km, c.kmBruto, NOMES_FONTE_KM[c.fonteKm] || c.fonteKm, c.ajusteKmPct, c.pedagio,
+      c.eixos, c.nomeVeiculoAntt, c.tipoVeiculoMercado, c.veiculoValorKm,
+      c.aproxFonte === "spot" ? "SPOT" : "Custo por KM", c.aproxSpotValor, c.valorMercadoria,
+      c.anttFonte === "api" ? "API QualP" : "Cadastro manual", c.anttCcd, c.anttCc,
+      c.anttFreightCost, c.anttLoadUnloadCost, c.anttResolucao,
+      c.custoAntt, c.custoAprox, c.servicoAdicionalDescricao, c.servicoAdicionalValor,
+      c.pctCustoFixo, c.pctImpostos, c.pctMargem, c.pctComissao, c.mkp, c.pctAdvalorem, c.advalorem,
+      c.aliquotaIcms, c.fonteIcms,
+      c.fretePesoAntt, c.icmsAntt, c.totalAntt,
+      c.fretePesoMerc, c.icmsMerc, c.totalMerc,
+    ]);
+  const csv = [colunas, ...linhas]
+    .map((linha) => linha.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";"))
+    .join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `historico-cotacoes-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+/* ============================================================
+   Máscara de CEP + preenchimento automático de endereço/cidade/UF
+   ============================================================ */
+async function preencherEnderecoPorCEP(cepInputId, cidadeInputId, feedbackId) {
+  const feedback = $(feedbackId);
+  const clean = onlyDigits($(cepInputId).value);
+  if (clean.length !== 8) return;
+
+  feedback.className = "address-feedback";
+  feedback.textContent = "Consultando CEP...";
+
+  const dadosCep = await buscarCEP(clean);
+
+  // Evita sobrescrever se o usuário já digitou outro CEP enquanto a consulta rodava
+  if (onlyDigits($(cepInputId).value) !== clean) return;
+
+  if (dadosCep.erro) {
+    feedback.textContent = dadosCep.motivo;
+    feedback.classList.add("err");
+    return;
+  }
+
+  const cidadeUf = `${dadosCep.cidade} - ${dadosCep.uf}`;
+  $(cidadeInputId).value = cidadeUf;
+
+  if (dadosCep.logradouro) {
+    feedback.textContent = `✓ ${dadosCep.logradouro}${dadosCep.bairro ? ", " + dadosCep.bairro : ""} — ${cidadeUf}`;
+  } else {
+    feedback.textContent = `✓ ${cidadeUf} (CEP sem logradouro detalhado — será usado o centro da cidade)`;
+  }
+  feedback.classList.add("ok");
+  tentarAutoCalculoKm();
+}
+
+function mascararCEP(input, cidadeInputId, feedbackId) {
+  input.addEventListener("input", () => {
+    let v = onlyDigits(input.value).slice(0, 8);
+    if (v.length > 5) v = v.slice(0, 5) + "-" + v.slice(5);
+    input.value = v;
+    if (onlyDigits(v).length === 8) {
+      preencherEnderecoPorCEP(input.id, cidadeInputId, feedbackId);
+    }
+  });
+}
+mascararCEP($("cepOrigem"), "cidadeOrigem", "feedbackOrigem");
+mascararCEP($("cepDestino"), "cidadeDestino", "feedbackDestino");
+
+/* ============================================================
+   Autocomplete de Cidade (IBGE) — evita erro de digitação de
+   cidade/estado, mostrando sugestões enquanto o usuário digita.
+   ============================================================ */
+const IBGE_CACHE_KEY = "cf_ibge_municipios_v1";
+const IBGE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+let municipiosCache = null;
+let municipiosPromise = null;
+
+function normalizeStr(s) {
+  return (s || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+async function carregarMunicipios() {
+  if (municipiosCache) return municipiosCache;
+  if (municipiosPromise) return municipiosPromise;
+
+  municipiosPromise = (async () => {
+    try {
+      const raw = localStorage.getItem(IBGE_CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (cached && Array.isArray(cached.data) && cached.data.length > 1000 && Date.now() - cached.ts < IBGE_CACHE_TTL_MS) {
+          municipiosCache = cached.data;
+          return municipiosCache;
+        }
+      }
+    } catch (e) {
+      /* cache corrompido: ignora e busca de novo */
+    }
+
+    try {
+      const resp = await fetch("https://servicodados.ibge.gov.br/api/v1/localidades/municipios");
+      const data = await resp.json();
+      const lista = data
+        .map((m) => ({
+          nome: m.nome,
+          uf: m.microrregiao && m.microrregiao.mesorregiao && m.microrregiao.mesorregiao.UF ? m.microrregiao.mesorregiao.UF.sigla : "",
+        }))
+        .filter((m) => m.uf);
+      lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+      lista.forEach((m) => (m.norm = normalizeStr(m.nome)));
+      municipiosCache = lista;
+      try {
+        localStorage.setItem(IBGE_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: lista }));
+      } catch (e) {
+        /* localStorage cheio: segue funcionando sem cache persistente */
+      }
+      return municipiosCache;
+    } catch (e) {
+      municipiosCache = [];
+      return municipiosCache;
+    }
+  })();
+
+  return municipiosPromise;
+}
+
+/**
+ * Liga o autocomplete de cidade a um par input/lista já existentes no DOM.
+ * `aoSelecionar(municipio)` roda depois de preencher o campo — cada chamador decide o que
+ * fazer (recalcular KM na Calculadora, atualizar uma linha da tabela SPOT, etc.).
+ */
+function configurarAutocompleteCidadeElementos(input, list, aoSelecionar) {
+  let ativo = -1;
+  let itens = [];
+
+  function atualizarAtivo() {
+    [...list.children].forEach((li, idx) => li.classList.toggle("active", idx === ativo));
+    const el = list.children[ativo];
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }
+
+  function fechar() {
+    list.hidden = true;
+    list.innerHTML = "";
+    ativo = -1;
+    itens = [];
+  }
+
+  function selecionar(m) {
+    input.value = `${m.nome} - ${m.uf}`;
+    fechar();
+    if (aoSelecionar) aoSelecionar(m);
+  }
+
+  function renderizar(matches, termo) {
+    list.innerHTML = "";
+    itens = matches;
+    ativo = -1;
+
+    if (!matches.length) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = termo.length < 2 ? "Digite ao menos 2 letras" : "Nenhuma cidade encontrada";
+      list.appendChild(li);
+      list.hidden = false;
+      return;
+    }
+
+    matches.forEach((m) => {
+      const li = document.createElement("li");
+      li.textContent = `${m.nome} - ${m.uf}`;
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        selecionar(m);
+      });
+      list.appendChild(li);
+    });
+    list.hidden = false;
+  }
+
+  async function buscar() {
+    const termo = input.value.trim();
+    if (termo.length < 2) {
+      fechar();
+      return;
+    }
+    const municipios = await carregarMunicipios();
+    const norm = normalizeStr(termo);
+    const iniciaCom = [];
+    const contem = [];
+    for (const m of municipios) {
+      if (m.norm.startsWith(norm)) iniciaCom.push(m);
+      else if (m.norm.includes(norm)) contem.push(m);
+    }
+    // Nomes mais curtos (mais próximos do termo digitado) aparecem primeiro —
+    // evita que uma cidade grande e conhecida (ex. "Campinas") fique escondida
+    // atrás de várias cidades pequenas com prefixo parecido (ex. "Campina Verde").
+    const porRelevancia = (a, b) => a.nome.length - b.nome.length || a.nome.localeCompare(b.nome, "pt-BR");
+    iniciaCom.sort(porRelevancia);
+    contem.sort(porRelevancia);
+    const matches = iniciaCom.concat(contem).slice(0, 8);
+    // Só renderiza se o campo ainda tiver o mesmo termo (evita resposta atrasada sobrescrever)
+    if (normalizeStr(input.value.trim()) === norm) renderizar(matches, termo);
+  }
+
+  let debounceTimer;
+  input.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(buscar, 150);
+  });
+  input.addEventListener("focus", () => {
+    if (input.value.trim().length >= 2) buscar();
+  });
+  input.addEventListener("blur", () => {
+    setTimeout(fechar, 120); // dá tempo do mousedown no item rodar antes de fechar
+  });
+  input.addEventListener("keydown", (e) => {
+    if (list.hidden || !itens.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      ativo = Math.min(ativo + 1, itens.length - 1);
+      atualizarAtivo();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      ativo = Math.max(ativo - 1, 0);
+      atualizarAtivo();
+    } else if (e.key === "Enter") {
+      if (ativo >= 0) {
+        e.preventDefault();
+        selecionar(itens[ativo]);
+      }
+    } else if (e.key === "Escape") {
+      fechar();
+    }
+  });
+}
+
+function configurarAutocompleteCidade(inputId, listId) {
+  configurarAutocompleteCidadeElementos($(inputId), $(listId), () => tentarAutoCalculoKm());
+}
+
+configurarAutocompleteCidade("cidadeOrigem", "listCidadeOrigem");
+configurarAutocompleteCidade("cidadeDestino", "listCidadeDestino");
+carregarMunicipios(); // pré-carrega a lista de cidades em segundo plano
+
+/* ============================================================
+   Init
+   ============================================================ */
+preencherSelects();
+renderAnttConfig();
+renderTabelaAntt();
+renderTabelaVeiculos();
+renderTabelaSpot();
+renderVenda();
+preencherFiltroIcms();
+renderTabelaIcms();
+$("ajusteKm").value = ajusteKmPct;
+$("orsApiKey").value = orsApiKey;
+$("qualpApiKey").value = qualpApiKey;
+renderTabelaVendedores();
+preencherSelectVendedor();
+renderHistorico();

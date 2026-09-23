@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculadora de Frete</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">🚛</span>
+    <div>
+      <h1>Calculadora de Frete</h1>
+      <p>Comparativo ANTT x Custo Aproximado &middot; uso local</p>
+    </div>
+  </div>
+  <nav class="tabs">
+    <div class="tabs-dropdown" id="cadastrosDropdown">
+      <button class="tab-btn dropdown-toggle" type="button" id="btnCadastrosToggle">Cadastros <span class="dropdown-arrow">&#9662;</span></button>
+      <div class="tabs-dropdown-menu" id="cadastrosMenu" hidden>
+        <button class="tab-btn dropdown-item" data-tab="antt">Cadastro ANTT</button>
+        <button class="tab-btn dropdown-item" data-tab="veiculos">Custo por KM</button>
+        <button class="tab-btn dropdown-item" data-tab="spot">Custo Operação SPOT</button>
+        <button class="tab-btn dropdown-item" data-tab="icms">ICMS</button>
+        <button class="tab-btn dropdown-item" data-tab="rota">Rota</button>
+        <button class="tab-btn dropdown-item" data-tab="vendedores">Vendedores</button>
+      </div>
+    </div>
+
+    <button class="tab-btn active" data-tab="calculadora">Calculadora</button>
+
+    <button class="tab-btn" data-tab="historico">Histórico</button>
+
+    <div class="tabs-dropdown" id="configDropdown">
+      <button class="tab-btn dropdown-toggle" type="button" id="btnConfigToggle">Configuração <span class="dropdown-arrow">&#9662;</span></button>
+      <div class="tabs-dropdown-menu" id="configMenu" hidden>
+        <button class="tab-btn dropdown-item" data-tab="venda">Parâmetros de Venda</button>
+      </div>
+    </div>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ===================== ABA CALCULADORA ===================== -->
+  <section id="tab-calculadora" class="tab-panel active">
+    <div class="card">
+      <label class="campo-largo">Vendedor
+        <select id="vendedorSelecionado"></select>
+      </label>
+      <small class="hint" id="vendedorAviso"></small>
+    </div>
+
+    <div class="grid-2">
+
+      <div class="card">
+        <h2>Origem</h2>
+        <label>CEP Origem
+          <input type="text" id="cepOrigem" placeholder="00000-000" maxlength="9" inputmode="numeric">
+        </label>
+        <label>Cidade Origem
+          <div class="autocomplete-wrap">
+            <input type="text" id="cidadeOrigem" autocomplete="off" placeholder="Digite para buscar a cidade">
+            <ul class="autocomplete-list" id="listCidadeOrigem" hidden></ul>
+          </div>
+        </label>
+        <div class="address-feedback" id="feedbackOrigem"></div>
+      </div>
+
+      <div class="card">
+        <h2>Destino</h2>
+        <label>CEP Destino
+          <input type="text" id="cepDestino" placeholder="00000-000" maxlength="9" inputmode="numeric">
+        </label>
+        <label>Cidade Destino
+          <div class="autocomplete-wrap">
+            <input type="text" id="cidadeDestino" autocomplete="off" placeholder="Digite para buscar a cidade">
+            <ul class="autocomplete-list" id="listCidadeDestino" hidden></ul>
+          </div>
+        </label>
+        <div class="address-feedback" id="feedbackDestino"></div>
+      </div>
+
+    </div>
+
+    <div class="card">
+      <h2>Operação</h2>
+      <div class="grid-3">
+        <label>Km entre as cidades
+          <div class="input-with-btn">
+            <input type="number" id="kmDistancia" placeholder="0" min="0" step="0.1">
+            <input type="number" id="ajusteKm" class="ajuste-km-input" placeholder="0%" step="0.1" title="Ajuste de rota (%) sobre o KM calculado. Compare com uma ferramenta especializada (ex.: QualP) e calibre aqui se notar diferença sistemática.">
+            <button type="button" id="btnCalcularKm" class="btn-secondary" title="Calcular distância automaticamente">Calcular KM</button>
+          </div>
+          <small id="kmInfo" class="hint"></small>
+        </label>
+        <label>Pedágio (R$)
+          <input type="number" id="pedagio" placeholder="0,00" min="0" step="0.01" value="0">
+          <small id="pedagioInfo" class="hint"></small>
+        </label>
+        <label>Valor da Mercadoria (R$)
+          <input type="number" id="valorMercadoria" placeholder="0,00" min="0" step="0.01" value="0">
+        </label>
+      </div>
+
+      <div class="grid-2">
+        <div class="campo-lado antt">
+          <label>Quantidade de eixos <span class="campo-lado-tag">usado no Custo ANTT</span>
+            <select id="qtdEixos"></select>
+          </label>
+        </div>
+        <div class="campo-lado aprox">
+          <label>Tipo de veículo <span class="campo-lado-tag">usado no Custo Aproximado</span>
+            <select id="tipoVeiculo"></select>
+          </label>
+        </div>
+      </div>
+
+      <div class="spot-info-box" id="spotInfoBox" hidden></div>
+
+      <button type="button" id="btnCalcular" class="btn-primary">Calcular Custos</button>
+    </div>
+
+    <div class="card results" id="resultsCard" hidden>
+      <h2>Resultado &mdash; Custo da Operação</h2>
+      <div class="grid-2">
+        <div class="result-box antt">
+          <span class="result-label">Custo ANTT (piso mínimo legal) <span id="resAnttVeiculo"></span></span>
+          <span class="result-value" id="resAntt">R$ 0,00</span>
+          <span class="result-formula" id="resAnttFormula"></span>
+        </div>
+        <div class="result-box aprox">
+          <span class="result-label">Custo Aproximado (mercado/veículo)</span>
+          <span class="result-value" id="resAprox">R$ 0,00</span>
+          <span class="result-formula" id="resAproxFormula"></span>
+        </div>
+      </div>
+
+      <h3>Serviço Adicional</h3>
+      <p class="hint">Custo extra (ex.: ajudante, seguro adicional, taxa de espera) somado ao valor da contratação nos dois cenários.</p>
+      <div class="grid-2">
+        <label>Descrição do Serviço Adicional
+          <input type="text" id="servicoAdicionalDescricao" placeholder="Ex.: Ajudante extra">
+        </label>
+        <label>Valor do Serviço Adicional (R$)
+          <input type="number" id="servicoAdicionalValor" placeholder="0,00" min="0" step="0.01" value="0">
+        </label>
+      </div>
+
+      <h3>Composição do Valor do Frete</h3>
+      <p class="hint">Frete Peso = Custo &divide; MKP &middot; ICMS calculado "por dentro": Total = (Frete Peso + Ad Valorem + Pedágio) &divide; (1 &minus; alíquota)</p>
+      <div class="grid-2">
+        <div class="composicao-col antt">
+          <h4>Baseado no Custo ANTT</h4>
+          <table class="composicao-table">
+            <tbody>
+              <tr><td>Frete Peso</td><td id="compAnttFretePeso">R$ 0,00</td></tr>
+              <tr><td>Ad Valorem</td><td id="compAnttAdvalorem">R$ 0,00</td></tr>
+              <tr><td>Pedágio</td><td id="compAnttPedagio">R$ 0,00</td></tr>
+              <tr><td>ICMS</td><td id="compAnttIcms">R$ 0,00</td></tr>
+              <tr class="total"><td>Total Venda</td><td id="compAnttTotal">R$ 0,00</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="composicao-col aprox">
+          <h4>Baseado no Custo de Mercado</h4>
+          <table class="composicao-table">
+            <tbody>
+              <tr><td>Frete Peso</td><td id="compMercFretePeso">R$ 0,00</td></tr>
+              <tr><td>Ad Valorem</td><td id="compMercAdvalorem">R$ 0,00</td></tr>
+              <tr><td>Pedágio</td><td id="compMercPedagio">R$ 0,00</td></tr>
+              <tr><td>ICMS</td><td id="compMercIcms">R$ 0,00</td></tr>
+              <tr class="total"><td>Total Venda</td><td id="compMercTotal">R$ 0,00</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <small class="hint" id="icmsInfo"></small>
+      <div class="salvar-cotacao-row">
+        <button type="button" id="btnSalvarCotacao" class="btn-primary">Salvar Cotação</button>
+        <span class="save-msg" id="msgCotacao"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ABA CADASTRO ANTT ===================== -->
+  <section id="tab-antt" class="tab-panel">
+    <div class="card">
+      <h2>Fonte do Custo ANTT</h2>
+      <p class="hint">
+        Se a <b>chave API QualP</b> estiver configurada na aba "Rota", o Custo ANTT é buscado
+        automaticamente por trecho (valores oficiais da resolução vigente, direto na API) usando
+        os parâmetros abaixo. O cadastro manual mais abaixo só é usado como reserva — sem chave,
+        ou se a consulta falhar.
+      </p>
+      <div class="grid-3">
+        <label>Tabela ANTT
+          <select id="anttFreightType">
+            <option value="A">A — Cavalo e carreta do contratado</option>
+            <option value="B">B — Somente carreta do contratante</option>
+            <option value="C">C — Alto desempenho, cavalo e carreta</option>
+            <option value="D">D — Alto desempenho, carreta do contratante</option>
+          </select>
+        </label>
+        <label>Tipo de Carga
+          <select id="anttLoadType">
+            <option value="geral">Geral</option>
+            <option value="granel_solido">Granel sólido</option>
+            <option value="granel_liquido">Granel líquido</option>
+            <option value="granel_pressurizada">Granel pressurizada</option>
+            <option value="frigorificada">Frigorificada</option>
+            <option value="conteineirizada">Conteineirizada</option>
+            <option value="neogranel">Neogranel</option>
+            <option value="perigosa_geral">Perigosa — geral</option>
+            <option value="perigosa_granel_solido">Perigosa — granel sólido</option>
+            <option value="perigosa_granel_liquido">Perigosa — granel líquido</option>
+            <option value="perigosa_frigorificada">Perigosa — frigorificada</option>
+            <option value="perigosa_conteineirizada">Perigosa — conteineirizada</option>
+          </select>
+        </label>
+        <label>Retorno vazio obrigatório
+          <select id="anttEmptyReturn">
+            <option value="false">Não</option>
+            <option value="true">Sim</option>
+          </select>
+        </label>
+      </div>
+      <button type="button" id="btnSalvarAnttConfig" class="btn-primary">Salvar Parâmetros</button>
+      <span class="save-msg" id="msgAnttConfig"></span>
+    </div>
+
+    <div class="card">
+      <h2>Cadastro Manual &mdash; Carga Lotação (Tabela A)</h2>
+      <p class="hint">
+        Cadastre por número de eixos o coeficiente de deslocamento (CCD, R$/km) e o coeficiente de
+        carga e descarga (CC, taxa fixa em R$), conforme a resolução ANTT vigente. Usado apenas
+        quando a API QualP não estiver disponível. O pedágio informado na calculadora é somado à parte.
+      </p>
+      <table class="editable-table" id="tabelaAntt">
+        <thead>
+          <tr><th>Nº de Eixos</th><th>Nome do Veículo</th><th>CCD &mdash; Deslocamento (R$/km)</th><th>CC &mdash; Carga/Descarga (R$ fixo)</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <button type="button" id="btnAddEixo" class="btn-secondary">+ Adicionar linha</button>
+      <button type="button" id="btnSalvarAntt" class="btn-primary">Salvar Cadastro</button>
+      <span class="save-msg" id="msgAntt"></span>
+    </div>
+  </section>
+
+  <!-- ===================== ABA CUSTO POR KM ===================== -->
+  <section id="tab-veiculos" class="tab-panel">
+    <div class="card">
+      <h2>Custo por KM Aproximado</h2>
+      <p class="hint">Valor de referência por km rodado, multiplicado pela distância entre origem e destino.</p>
+      <table class="editable-table" id="tabelaVeiculos">
+        <thead>
+          <tr><th>Tipo de Veículo</th><th>Valor por KM (R$)</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <button type="button" id="btnAddVeiculo" class="btn-secondary">+ Adicionar veículo</button>
+      <button type="button" id="btnSalvarVeiculos" class="btn-primary">Salvar Cadastro</button>
+      <span class="save-msg" id="msgVeiculos"></span>
+    </div>
+  </section>
+
+  <!-- ===================== ABA CUSTO OPERAÇÃO SPOT ===================== -->
+  <section id="tab-spot" class="tab-panel">
+    <div class="card">
+      <h2>Custo de Operação SPOT</h2>
+      <p class="hint">
+        Cadastre um valor fixo negociado (custo do veículo, <b>sem pedágio</b>) para um trecho
+        (cidade/UF origem → cidade/UF destino) e tipo de veículo específicos. Se o trecho
+        calculado bater com uma linha cadastrada aqui (mesma origem, destino e veículo), o Custo
+        Aproximado passa a ser exatamente esse valor cadastrado — sem somar pedágio (o pedágio
+        entra separado, só na Composição do Valor do Frete). Sem SPOT correspondente, o app usa
+        o Custo por KM normalmente, que aí sim soma o pedágio ao custo.
+      </p>
+
+      <div class="spot-import-row">
+        <label>Importar de Planilha Excel (.xlsx)
+          <input type="file" id="spotImportFile" accept=".xlsx">
+        </label>
+        <button type="button" id="btnImportarSpot" class="btn-secondary">Importar Planilha</button>
+        <span class="save-msg" id="msgSpotImport"></span>
+      </div>
+      <p class="hint">
+        Formato esperado: coluna A "Cidade-UF X Cidade-UF" (trecho), coluna B tipo de veículo,
+        coluna C valor (R$). Trechos já cadastrados (mesma origem/destino/veículo) são atualizados;
+        os demais são adicionados. Tipos de veículo que não existirem no cadastro "Custo por KM"
+        são criados automaticamente lá (com R$/km 0,00 — ajuste se for usar sem SPOT).
+      </p>
+
+      <table class="editable-table" id="tabelaSpot">
+        <thead>
+          <tr><th>Cidade/UF Origem</th><th>Cidade/UF Destino</th><th>Tipo de Veículo</th><th>Valor (R$)</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <button type="button" id="btnAddSpot" class="btn-secondary">+ Adicionar trecho</button>
+      <button type="button" id="btnSalvarSpot" class="btn-primary">Salvar Cadastro</button>
+      <span class="save-msg" id="msgSpot"></span>
+    </div>
+  </section>
+
+  <!-- ===================== ABA PARAMETROS DE VENDA ===================== -->
+  <section id="tab-venda" class="tab-panel">
+    <div class="card">
+      <h2>Parâmetros de Venda (Markup)</h2>
+      <p class="hint">Define a formação de preço a partir do custo: Preço = Custo &divide; MKP, onde MKP = 1 &minus; (soma dos % &divide; 100)</p>
+      <div class="grid-4">
+        <label>% Custo Fixo
+          <input type="number" id="pctCustoFixo" min="0" max="99" step="0.1" value="5">
+        </label>
+        <label>% Impostos Federais
+          <input type="number" id="pctImpostos" min="0" max="99" step="0.1" value="8">
+        </label>
+        <label>% Margem Esperada
+          <input type="number" id="pctMargem" min="0" max="99" step="0.1" value="11">
+        </label>
+        <label>% Comissão
+          <input type="number" id="pctComissao" min="0" max="99" step="0.1" value="3">
+        </label>
+      </div>
+      <div class="mkp-preview">
+        <span>Soma dos percentuais: <b id="somaPct">27%</b></span>
+        <span>MKP 1: <b id="mkpValor">0,7300</b></span>
+      </div>
+
+      <h3>Ad Valorem</h3>
+      <p class="hint">Percentual aplicado sobre o valor da mercadoria (seguro/risco da carga). Não entra na soma do MKP acima.</p>
+      <label class="campo-largo">% Ad Valorem
+        <input type="number" id="pctAdvalorem" min="0" max="99" step="0.01" value="0">
+      </label>
+
+      <button type="button" id="btnSalvarVenda" class="btn-primary">Salvar Parâmetros</button>
+      <span class="save-msg" id="msgVenda"></span>
+    </div>
+  </section>
+
+  <!-- ===================== ABA ICMS ===================== -->
+  <section id="tab-icms" class="tab-panel">
+    <div class="card">
+      <h2>Alíquota de ICMS entre estados</h2>
+      <p class="hint">
+        Tabela já vem preenchida com as 729 combinações de UF Origem x UF Destino (inclui operações
+        dentro do mesmo estado), conforme a tabela de referência da PortoEx. Edite qualquer linha
+        para corrigir uma alíquota específica — a alteração fica salva. Se alguma combinação for
+        removida da tabela, o app usa como reserva a regra geral interestadual (Resolução do Senado
+        Federal nº 22/1989: 7% Sul/Sudeste exceto ES → Norte/Nordeste/Centro-Oeste/ES; 12% nos
+        demais casos interestaduais).
+      </p>
+      <label class="campo-largo">Filtrar por UF Origem
+        <select id="filtroIcmsOrigem"></select>
+      </label>
+      <div class="tabela-scroll">
+        <table class="editable-table" id="tabelaIcms">
+          <thead>
+            <tr><th>UF Origem</th><th>UF Destino</th><th>Alíquota (%)</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button type="button" id="btnAddIcms" class="btn-secondary">+ Adicionar linha</button>
+      <button type="button" id="btnSalvarIcms" class="btn-primary">Salvar Cadastro</button>
+      <span class="save-msg" id="msgIcms"></span>
+    </div>
+  </section>
+
+  <!-- ===================== ABA ROTA (perfil de caminhão) ===================== -->
+  <section id="tab-rota" class="tab-panel">
+    <div class="card">
+      <h2>Precisão da Rota (perfil de caminhão)</h2>
+      <p class="hint">
+        Por padrão o KM é calculado pelo OSRM, que roteia como <b>carro</b> — por isso pode ficar um
+        pouco mais curto que ferramentas especializadas em transporte de carga (ex.: QualP), e essa
+        diferença varia de trecho para trecho. Para eliminar essa variação sem precisar comparar
+        manualmente, conecte uma chave gratuita do <b>OpenRouteService</b>: o app passa a calcular o
+        KM usando o perfil <b>HGV (veículo pesado)</b>, que já considera restrições de rota para
+        caminhão automaticamente.
+      </p>
+      <ol class="hint" style="padding-left: 18px; margin: 0 0 14px;">
+        <li>Crie uma conta gratuita em <b>openrouteservice.org/dev/#/signup</b> (não custa nada, ~2 min).</li>
+        <li>Copie a "API Key" gerada no painel (token do tipo "Standard").</li>
+        <li>Cole a chave abaixo e salve.</li>
+      </ol>
+      <label class="campo-largo">Chave API OpenRouteService (opcional)
+        <input type="text" id="orsApiKey" placeholder="Cole aqui sua chave gratuita" autocomplete="off">
+      </label>
+      <button type="button" id="btnSalvarOrs" class="btn-primary">Salvar Chave</button>
+      <button type="button" id="btnLimparOrs" class="btn-secondary">Remover Chave</button>
+      <span class="save-msg" id="msgOrs"></span>
+      <p class="hint" style="margin-top: 14px;">
+        Sem chave cadastrada (ou se a chave falhar/expirar), o app volta automaticamente para o OSRM
+        + o campo "Ajuste de rota (%)" manual da Calculadora.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>API QualP (KM + Pedágio automático)</h2>
+      <p class="hint">
+        Se você já tem uma assinatura da <b>QualP API</b> (api.qualp.com.br), cole a chave abaixo.
+        Quando configurada, ela vira a fonte <b>prioritária</b> para Km, duração e pedágio — os três
+        calculados numa só consulta, direto pelo motor da QualP (o mesmo do site), incluindo a soma
+        automática das praças de pedágio no campo "Pedágio (R$)" da Calculadora. Sem essa chave, o
+        app usa OpenRouteService/OSRM (acima) e o pedágio continua manual.
+      </p>
+      <label class="campo-largo">Chave API QualP (access-token)
+        <input type="text" id="qualpApiKey" placeholder="Cole aqui sua chave da QualP API" autocomplete="off">
+      </label>
+      <button type="button" id="btnSalvarQualp" class="btn-primary">Salvar Chave</button>
+      <button type="button" id="btnLimparQualp" class="btn-secondary">Remover Chave</button>
+      <span class="save-msg" id="msgQualp"></span>
+    </div>
+  </section>
+
+  <!-- ===================== ABA VENDEDORES ===================== -->
+  <section id="tab-vendedores" class="tab-panel">
+    <div class="card">
+      <h2>Cadastro de Vendedores</h2>
+      <p class="hint">Cadastre os vendedores para selecionar na Calculadora ao salvar uma cotação.</p>
+      <table class="editable-table" id="tabelaVendedores">
+        <thead>
+          <tr><th>Nome</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <button type="button" id="btnAddVendedor" class="btn-secondary">+ Adicionar vendedor</button>
+      <button type="button" id="btnSalvarVendedores" class="btn-primary">Salvar Cadastro</button>
+      <span class="save-msg" id="msgVendedores"></span>
+    </div>
+  </section>
+
+  <!-- ===================== ABA HISTORICO ===================== -->
+  <section id="tab-historico" class="tab-panel">
+    <div class="card">
+      <h2>Histórico de Cotações</h2>
+      <p class="hint">Cotações salvas na Calculadora, mais recentes primeiro. Clique numa linha para ver os detalhes, ou no número da cotação para abrir o DRE Projetado.</p>
+      <div class="tabela-scroll tabela-scroll-x">
+        <table class="editable-table" id="tabelaHistorico">
+          <thead>
+            <tr>
+              <th>Nº Cotação</th><th>Data/Hora</th><th>Vendedor</th><th>Origem</th><th>Destino</th><th>Km</th>
+              <th>Pedágio</th><th>Valor Mercadoria</th><th>Total ANTT</th><th>Total Mercado</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="hint" id="historicoVazio">Nenhuma cotação salva ainda.</p>
+      <button type="button" id="btnExportarHistorico" class="btn-secondary">Exportar CSV</button>
+    </div>
+  </section>
+
+  <!-- ===================== ABA DRE PROJETADO ===================== -->
+  <section id="tab-dre" class="tab-panel">
+    <div class="card">
+      <h2>DRE Projetado <span id="dreNumeroCotacao"></span></h2>
+      <p class="hint" id="dreSubtitulo"></p>
+      <div class="grid-2">
+        <div class="composicao-col antt">
+          <h4>Baseado no Custo ANTT</h4>
+          <table class="composicao-table dre-table" id="dreTabelaAntt"></table>
+        </div>
+        <div class="composicao-col aprox">
+          <h4>Baseado no Custo de Mercado</h4>
+          <table class="composicao-table dre-table" id="dreTabelaMerc"></table>
+        </div>
+      </div>
+      <div style="margin-top: 14px;">
+        <button type="button" id="btnVoltarHistorico" class="btn-secondary">&larr; Voltar ao Histórico</button>
+        <button type="button" id="btnExportarDreExcel" class="btn-primary">Exportar para Excel</button>
+        <span class="save-msg" id="msgDreExcel"></span>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="modal-overlay" id="rotaModalOverlay" hidden>
+  <div class="modal-box">
+    <h3>Mais de uma rota encontrada</h3>
+    <p class="hint">Escolha qual rota deve ser usada no cálculo do KM:</p>
+    <div class="rota-opcoes" id="rotaOpcoes"></div>
+    <button type="button" id="btnCancelarRota" class="btn-secondary">Cancelar</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="detalheCotacaoOverlay" hidden>
+  <div class="modal-box detalhe-cotacao-box">
+    <h3>Detalhes da Cotação</h3>
+    <table class="composicao-table" id="detalheCotacaoTabela"></table>
+    <button type="button" id="btnFecharDetalheCotacao" class="btn-secondary">Fechar</button>
+  </div>
+</div>
+
+<footer>
+  <p>Versão local de testes &middot; dados salvos no navegador (localStorage) &middot; distância via OpenStreetMap/OSRM</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

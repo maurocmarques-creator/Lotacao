@@ -247,11 +247,15 @@ input:focus, select:focus { outline: none; border-color: var(--blue-500); box-sh
 .result-box.antt { background: var(--blue-100); }
 .result-box.aprox { background: var(--amber-100); }
 .result-box.spot { background: var(--green-100); }
+.result-box.efetivo { background: var(--blue-900); }
 .result-label { font-size: 12.5px; font-weight: 600; color: var(--gray-500); }
 .result-value { font-size: 26px; font-weight: 700; color: var(--blue-900); }
 .result-box.aprox .result-value { color: #8a5a10; }
 .result-box.spot .result-value { color: var(--green-600); }
 .result-box.spot .result-formula { color: var(--green-600); font-weight: 600; }
+.result-box.efetivo .result-label { color: #b9cdf0; }
+.result-box.efetivo .result-value { color: #fff; font-size: 28px; }
+.result-box.efetivo .result-formula { color: #b9cdf0; }
 .result-formula { font-size: 11.5px; color: var(--gray-500); }
 .result-box.sale .result-value { font-size: 22px; color: var(--green-600); }
 .result-warning {

@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 11:54";
+const BUILD_TIMESTAMP = "23/09/2026 15:38";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -173,6 +173,7 @@ const state = {
   custoAprox: 0,
   custoSpot: null,
   spotDisponivel: false,
+  custoEfetivo: null,
   servicoAdicionalDescricao: "",
   servicoAdicionalValor: 0,
   ufOrigem: "",
@@ -1129,6 +1130,7 @@ async function calcular() {
     $("resSpotAviso").textContent = "";
   }
 
+  atualizarCustoEfetivo();
   $("resultsCard").hidden = false;
   atualizarComposicao();
 
@@ -1150,9 +1152,60 @@ async function calcular() {
       $("resAnttVeiculo").textContent = `— via API QualP${linhaAntt.nome ? " · " + linhaAntt.nome : ""}`;
       $("resAnttFormula").textContent =
         `${fmtBRL(resultadoAntt.freightCost)} (frete-peso) + ${fmtBRL(resultadoAntt.loadUnloadCost)} (carga/descarga) + ${fmtBRL(pedagio)} (pedágio)${servicoAdicionalTexto} — ${resultadoAntt.resolucao || "ANTT"} · ${eixos} eixos`;
+      atualizarCustoEfetivo();
       atualizarComposicao();
     }
   }
+}
+
+/** Arredonda para cima na centena (ex.: 2305 → 2400; 2400 → 2400). */
+function arredondarCentenaCima(v) {
+  return Math.ceil((Number(v) || 0) / 100) * 100;
+}
+
+/** Custo Efetivo: o valor considerado de fato para a operação.
+ *  - KM ≥ 200: o maior entre Custo ANTT, Custo por KM e Custo SPOT (quando cadastrado),
+ *    arredondado para cima na centena.
+ *  - KM < 200: rotas curtas não usam ANTT/Custo por KM como referência — considera só o
+ *    SPOT cadastrado (arredondado do mesmo jeito); sem SPOT cadastrado, mostra aviso. */
+function atualizarCustoEfetivo() {
+  const km = state.kmDistancia || 0;
+  const curto = km > 0 && km < 200;
+
+  let base = null;
+  let formula = "";
+
+  if (curto) {
+    if (state.spotDisponivel) {
+      base = state.custoSpot;
+      formula = `KM < 200 (${fmtNum(km)} km) — considerado apenas o SPOT (${fmtBRL(state.custoSpot)}), arredondado para cima na centena`;
+    }
+  } else {
+    const candidatos = [
+      { nome: "ANTT", valor: state.custoAntt || 0 },
+      { nome: "Custo por KM", valor: state.custoAprox || 0 },
+    ];
+    if (state.spotDisponivel) candidatos.push({ nome: "SPOT", valor: state.custoSpot || 0 });
+    const maior = candidatos.reduce((a, b) => (b.valor > a.valor ? b : a));
+    base = maior.valor;
+    formula = `Maior entre ${candidatos.map((c) => `${c.nome} (${fmtBRL(c.valor)})`).join(", ")}, arredondado para cima na centena`;
+  }
+
+  if (base === null) {
+    $("resEfetivo").textContent = "—";
+    $("resEfetivoFormula").textContent = "";
+    $("resEfetivoAviso").hidden = false;
+    $("resEfetivoAviso").textContent = "⚠ Sem SPOT cadastrado para este trecho e veículo — necessário para rotas com menos de 200 km.";
+    state.custoEfetivo = null;
+    return;
+  }
+
+  const efetivo = arredondarCentenaCima(base);
+  $("resEfetivo").textContent = fmtBRL(efetivo);
+  $("resEfetivoFormula").textContent = formula;
+  $("resEfetivoAviso").hidden = true;
+  $("resEfetivoAviso").textContent = "";
+  state.custoEfetivo = efetivo;
 }
 
 function calcularLinhaComposicao(custoBase, mkp, advalorem, pedagio, aliquota) {
@@ -2358,6 +2411,7 @@ async function salvarCotacao() {
     anttResolucao: state.anttResolucao,
     custoAntt: state.custoAntt || 0,
     custoAprox: state.custoAprox || 0,
+    custoEfetivo: state.custoEfetivo,
 
     // Markup / Ad Valorem
     mkp: state.mkp,
@@ -2424,6 +2478,7 @@ function limparFormularioParaNovaCotacao() {
   state.custoAprox = 0;
   state.custoSpot = null;
   state.spotDisponivel = false;
+  state.custoEfetivo = null;
   state.compSpot = null;
   state.servicoAdicionalDescricao = "";
   state.servicoAdicionalValor = 0;
@@ -2437,6 +2492,11 @@ function limparFormularioParaNovaCotacao() {
   $("resSpotAviso").hidden = true;
   $("resSpotAviso").textContent = "";
   preencherColunaSpot(null);
+
+  $("resEfetivo").textContent = "R$ 0,00";
+  $("resEfetivoFormula").textContent = "";
+  $("resEfetivoAviso").hidden = true;
+  $("resEfetivoAviso").textContent = "";
 
   ultimoOrigemMapa = null;
   ultimoDestinoMapa = null;

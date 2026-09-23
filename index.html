@@ -143,7 +143,7 @@
 
     <div class="card results" id="resultsCard" hidden>
       <h2>Resultado &mdash; Custo da Operação</h2>
-      <div class="grid-3">
+      <div class="grid-4">
         <div class="result-box antt">
           <span class="result-label">Custo ANTT (piso mínimo legal) <span id="resAnttVeiculo"></span></span>
           <span class="result-value" id="resAntt">R$ 0,00</span>
@@ -159,6 +159,12 @@
           <span class="result-value" id="resSpot">R$ 0,00</span>
           <span class="result-formula" id="resSpotFormula"></span>
           <span class="result-warning" id="resSpotAviso" hidden></span>
+        </div>
+        <div class="result-box efetivo">
+          <span class="result-label">Custo Efetivo (considerado para a operação)</span>
+          <span class="result-value" id="resEfetivo">R$ 0,00</span>
+          <span class="result-formula" id="resEfetivoFormula"></span>
+          <span class="result-warning" id="resEfetivoAviso" hidden></span>
         </div>
       </div>
 

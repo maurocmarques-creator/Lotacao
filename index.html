@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calculadora de Frete</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 <header class="topbar">
@@ -209,6 +211,13 @@
         <button type="button" id="btnSalvarCotacao" class="btn-primary">Salvar Cotação</button>
         <span class="save-msg" id="msgCotacao"></span>
       </div>
+
+      <h3>Mapa da Rota</h3>
+      <p class="hint">
+        🟢 Origem &middot; 🚩 Pontos de entrega adicionais &middot; 🏁 Destino (ponto mais distante).
+        As linhas são retas entre os pontos, só para referência — não seguem exatamente a estrada.
+      </p>
+      <div id="mapaRota"></div>
     </div>
   </section>
 

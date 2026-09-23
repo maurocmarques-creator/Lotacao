@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 11:00";
+const BUILD_TIMESTAMP = "23/09/2026 11:08";
 
 /* ============================================================
    Persistência (localStorage) — troque por chamadas de API
@@ -595,6 +595,78 @@ function aplicarAjusteEExibir() {
   };
   $("kmInfo").textContent = mensagens[ultimaFonteKm] || mensagens.estimativa;
   calcular();
+  atualizarMapa();
+}
+
+/* ============================================================
+   Mapa da Rota (Leaflet + OpenStreetMap) — mostra Origem, Destino (ponto
+   mais distante) e os pontos de entrega adicionais como bandeirinhas.
+   Linhas retas entre os pontos, só de referência (não seguem a estrada).
+   ============================================================ */
+let mapaLeaflet = null;
+let mapaCamadaMarcadores = null;
+let ultimoOrigemMapa = null;
+let ultimoDestinoMapa = null;
+
+function inicializarMapaSeNecessario() {
+  if (mapaLeaflet || typeof L === "undefined") return;
+  mapaLeaflet = L.map("mapaRota");
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 18,
+  }).addTo(mapaLeaflet);
+  mapaCamadaMarcadores = L.layerGroup().addTo(mapaLeaflet);
+}
+
+function iconeMapaEmoji(emoji) {
+  return L.divIcon({
+    html: `<span style="font-size:26px; line-height:1;">${emoji}</span>`,
+    className: "mapa-icone-emoji",
+    iconSize: [28, 28],
+    iconAnchor: [14, 26],
+    popupAnchor: [0, -26],
+  });
+}
+
+/** Redesenha o Mapa da Rota com os pontos do último cálculo de KM (origem, destino e, se
+ * houver, os pontos de entrega adicionais que não foram o mais distante). */
+function atualizarMapa() {
+  if (!$("mapaRota") || $("resultsCard").hidden) return;
+  if (!ultimoOrigemMapa || !ultimoDestinoMapa) return;
+
+  inicializarMapaSeNecessario();
+  if (!mapaLeaflet) return; // Leaflet não carregou (ex.: sem internet no momento)
+
+  mapaCamadaMarcadores.clearLayers();
+  const pontosRota = [];
+
+  const origemLatLon = [ultimoOrigemMapa.lat, ultimoOrigemMapa.lon];
+  L.marker(origemLatLon, { icon: iconeMapaEmoji("🟢") })
+    .addTo(mapaCamadaMarcadores)
+    .bindPopup(`<b>Origem</b><br>${ultimoOrigemMapa.label}`);
+  pontosRota.push(origemLatLon);
+
+  const destinoNorm = normalizeStr(ultimoDestinoMapa.label);
+  ultimosCandidatosDestinoGeo
+    .filter((c) => normalizeStr(c.texto) !== destinoNorm)
+    .forEach((p) => {
+      const latlon = [p.lat, p.lon];
+      L.marker(latlon, { icon: iconeMapaEmoji("🚩") })
+        .addTo(mapaCamadaMarcadores)
+        .bindPopup(`<b>Parada</b><br>${p.texto}`);
+      pontosRota.push(latlon);
+    });
+
+  const destinoLatLon = [ultimoDestinoMapa.lat, ultimoDestinoMapa.lon];
+  L.marker(destinoLatLon, { icon: iconeMapaEmoji("🏁") })
+    .addTo(mapaCamadaMarcadores)
+    .bindPopup(`<b>Destino</b><br>${ultimoDestinoMapa.label}`);
+  pontosRota.push(destinoLatLon);
+
+  L.polyline(pontosRota, { color: "#1d5db1", weight: 3, dashArray: "6 8", opacity: 0.75 }).addTo(mapaCamadaMarcadores);
+
+  mapaLeaflet.fitBounds(pontosRota, { padding: [30, 30], maxZoom: 12 });
+  setTimeout(() => mapaLeaflet && mapaLeaflet.invalidateSize(), 150);
 }
 
 $("ajusteKm").addEventListener("input", () => {
@@ -664,6 +736,11 @@ function limparPontosEntregaExtras() {
   $("destinoAtivoInfo").textContent = "";
 }
 
+/** Coordenadas de cada candidato a destino geocodificado na última chamada de
+ * calcularDestinoAtivo (inclui o vencedor) — reaproveitado pelo Mapa da Rota, pra não
+ * geocodificar tudo de novo só pra desenhar os marcadores. */
+let ultimosCandidatosDestinoGeo = [];
+
 /** Entre a origem e todos os candidatos a destino (o campo "Cidade Destino" + os pontos
  * extras — nenhum deles é lido de forma destrutiva), descobre qual está mais longe (linha
  * reta, só para comparar) e grava o vencedor nos campos ocultos cepDestinoAtivo/
@@ -673,6 +750,7 @@ async function calcularDestinoAtivo(origemCoords) {
   $("cepDestinoAtivo").value = "";
   $("cidadeDestinoAtivo").value = "";
   $("destinoAtivoInfo").textContent = "";
+  ultimosCandidatosDestinoGeo = [];
 
   const extras = listarPontosEntregaExtras();
   if (!extras.length || !origemCoords) return;
@@ -687,6 +765,7 @@ async function calcularDestinoAtivo(origemCoords) {
     const { cidade, uf } = separarCidadeUf(cand.cidade);
     const geo = await geocodificarCidade(cidade || cand.cidade, uf);
     if (!geo) continue;
+    ultimosCandidatosDestinoGeo.push({ texto: cand.cidade, lat: geo.lat, lon: geo.lon });
     const dist = haversineKm(origemCoords.lat, origemCoords.lon, geo.lat, geo.lon);
     if (dist > melhorDist) {
       melhorDist = dist;
@@ -767,6 +846,11 @@ async function executarCalculoKm() {
     state.ufOrigem = origem.uf || "";
     state.ufDestino = destino.uf || "";
     atualizarComposicao();
+
+    // Guarda os pontos pro Mapa da Rota (desenhado em aplicarAjusteEExibir, já com o KM final).
+    const destinoLabelMapa = idsDestino.cidade === "cidadeDestino" ? $("cidadeDestino").value.trim() : $("cidadeDestinoAtivo").value.trim();
+    ultimoOrigemMapa = origem.coords ? { lat: origem.coords.lat, lon: origem.coords.lon, label: origem.cidadeResolvida || $("cidadeOrigem").value.trim() } : null;
+    ultimoDestinoMapa = destino.coords ? { lat: destino.coords.lat, lon: destino.coords.lon, label: destino.cidadeResolvida || destinoLabelMapa } : null;
 
     // 1) API QualP (se configurada): KM + duração + pedágio numa só consulta — a fonte mais
     // precisa, pois usa o mesmo motor de rota e a mesma base de praças do site da QualP.
@@ -2262,6 +2346,11 @@ function limparFormularioParaNovaCotacao() {
   $("resSpotAviso").hidden = true;
   $("resSpotAviso").textContent = "";
   preencherColunaSpot(null);
+
+  ultimoOrigemMapa = null;
+  ultimoDestinoMapa = null;
+  ultimosCandidatosDestinoGeo = [];
+  if (mapaCamadaMarcadores) mapaCamadaMarcadores.clearLayers();
 
   $("resultsCard").hidden = true;
   $("spotInfoBox").hidden = true;

@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 10:38";
+const BUILD_TIMESTAMP = "23/09/2026 10:46";
 
 /* ============================================================
    Persistência (localStorage) — troque por chamadas de API
@@ -931,10 +931,10 @@ async function calcular() {
 
   // Custo SPOT: valor fixo negociado para este trecho + veículo, se houver cadastro — mostrado
   // à parte, sem misturar com o Custo por KM, para comparar os três cenários lado a lado.
-  // SPOT é sempre Origem → primeira entrega (o campo "Cidade Destino" original) — é o preço
-  // negociado para esse trecho específico, nunca para o ponto mais distante quando há
-  // entregas adicionais (aí o aviso abaixo pede pra somar o custo delas à parte).
-  const spot = buscarSpot($("cidadeOrigem").value, $("cidadeDestino").value, veiculo);
+  // SPOT é Origem → cidade mais distante (o mesmo par usado no KM) — se houver cadastro pra
+  // esse par, traz o valor; o aviso abaixo continua pedindo pra somar o custo das entregas
+  // adicionais (pontos intermediários podem não estar cobertos pelo valor fechado do SPOT).
+  const spot = buscarSpot($("cidadeOrigem").value, textoDestinoAtivo(), veiculo);
   const custoSpot = spot ? spot.valor + servicoAdicionalValor : null;
   atualizarSpotInfoBox(spot, km);
 
@@ -977,12 +977,13 @@ async function calcular() {
   if (spot) {
     $("resSpot").textContent = fmtBRL(custoSpot);
     $("resSpotFormula").textContent = `${fmtBRL(spot.valor)} (SPOT cadastrado, sem pedágio)${servicoAdicionalTexto} — ${veiculo}`;
-    // SPOT cobre só Origem → primeira entrega — com pontos adicionais cadastrados, o valor
-    // não inclui o custo deles, então precisa avisar pra somar à parte.
+    // SPOT cobre só Origem → o ponto usado no cálculo — com pontos adicionais cadastrados,
+    // o valor pode não incluir o custo deles (ex.: paradas intermediárias), então precisa
+    // avisar pra somar à parte.
     const temEntregasAdicionais = listarPontosEntregaExtras().length > 0;
     $("resSpotAviso").hidden = !temEntregasAdicionais;
     $("resSpotAviso").textContent = temEntregasAdicionais
-      ? `⚠ Este SPOT cobre só Origem → ${$("cidadeDestino").value.trim()} (primeira entrega). Inclua o custo das entregas adicionais em "Serviço Adicional".`
+      ? `⚠ Este SPOT cobre só Origem → ${textoDestinoAtivo()} (ponto mais distante). Inclua o custo das entregas adicionais em "Serviço Adicional".`
       : "";
   } else {
     $("resSpot").textContent = "—";
@@ -1829,7 +1830,7 @@ function abrirDetalheCotacao(id) {
     if (c.spotDisponivel && c.pontosEntregaExtras && c.pontosEntregaExtras.length) {
       partes.push(linhaCampo(
         "Aviso SPOT",
-        `⚠ Cobre só Origem → ${c.destinoPrimeiraEntrega || c.destino || "primeira entrega"}. Não inclui o custo das entregas adicionais.`
+        `⚠ Cobre só Origem → ${c.destino || "ponto mais distante"}. Não inclui o custo das entregas adicionais.`
       ));
     }
   }
@@ -2148,10 +2149,6 @@ function salvarCotacao() {
     origem: $("cidadeOrigem").value.trim(),
     cepDestino: cepDestinoAtivoValor(),
     destino: textoDestinoAtivo(),
-    // "Primeira entrega": o campo "Cidade Destino" tal como digitado, sem depender do ponto
-    // mais distante — é o par usado pelo SPOT (origem → primeira entrega, sempre).
-    cepDestinoPrimeiraEntrega: $("cepDestino").value.trim(),
-    destinoPrimeiraEntrega: $("cidadeDestino").value.trim(),
     pontosEntregaExtras: pontosEntregaExtrasParaSalvar(),
     ufOrigem: state.ufOrigem || "",
     ufDestino: state.ufDestino || "",

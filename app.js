@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 10:46";
+const BUILD_TIMESTAMP = "23/09/2026 11:00";
 
 /* ============================================================
    Persistência (localStorage) — troque por chamadas de API
@@ -1286,8 +1286,10 @@ $("btnSalvarSpot").addEventListener("click", () => {
   setTimeout(() => ($("msgSpot").textContent = ""), 2500);
 });
 
+// Ignora acento também (não só maiúscula/minúscula e espaços) — evita falha de match só
+// porque alguém digitou "Itajai" numa hora e "Itajaí" noutra.
 function normalizarLocalSpot(s) {
-  return (s || "").trim().toLowerCase();
+  return normalizeStr(s);
 }
 
 /** Procura um valor SPOT cadastrado para o trecho (origem → destino) e veículo exatos. */

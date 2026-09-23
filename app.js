@@ -1274,6 +1274,74 @@ $("btnSalvarVenda").addEventListener("click", () => {
 });
 
 /* ============================================================
+   Aba Backup / Migração de Dados (exporta/importa tudo em .json —
+   usado para levar os cadastros de um endereço da calculadora para outro,
+   já que cada endereço/origem guarda seus dados separadamente no navegador)
+   ============================================================ */
+function exportarBackupCompleto() {
+  const dados = {};
+  Object.keys(STORAGE_KEYS).forEach((chave) => {
+    const raw = localStorage.getItem(STORAGE_KEYS[chave]);
+    if (raw !== null) {
+      try {
+        dados[chave] = JSON.parse(raw);
+      } catch (e) {
+        /* ignora chave corrompida */
+      }
+    }
+  });
+
+  const payload = { app: "calculadora-frete", versao: 1, exportadoEm: new Date().toISOString(), dados };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `calculadora-frete-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+$("btnExportarBackup").addEventListener("click", exportarBackupCompleto);
+
+async function importarBackupCompleto(file) {
+  const texto = await file.text();
+  const payload = JSON.parse(texto);
+  const dados = payload && payload.dados ? payload.dados : payload; // aceita tb um JSON "cru" {antt:..., veiculos:...}
+
+  let importadas = 0;
+  Object.keys(STORAGE_KEYS).forEach((chave) => {
+    if (dados[chave] !== undefined) {
+      saveJSON(STORAGE_KEYS[chave], dados[chave]);
+      importadas++;
+    }
+  });
+  return importadas;
+}
+
+$("btnImportarBackup").addEventListener("click", async () => {
+  const input = $("backupImportFile");
+  const msg = $("msgBackupImport");
+  const file = input.files[0];
+  if (!file) {
+    msg.textContent = "Selecione um arquivo .json primeiro.";
+    return;
+  }
+  if (!confirm("Isso vai substituir todos os cadastros deste navegador pelos dados do arquivo. Continuar?")) return;
+  msg.textContent = "Importando...";
+  try {
+    const importadas = await importarBackupCompleto(file);
+    if (!importadas) {
+      msg.textContent = "Nenhum dado reconhecido nesse arquivo.";
+      return;
+    }
+    msg.textContent = `${importadas} cadastro(s) importado(s). Recarregando...`;
+    setTimeout(() => location.reload(), 1200);
+  } catch (e) {
+    msg.textContent = "Erro ao importar: " + e.message;
+  }
+});
+
+/* ============================================================
    Aba ICMS (cadastro de exceções por UF origem/destino)
    ============================================================ */
 function optionsUf(selecionado) {

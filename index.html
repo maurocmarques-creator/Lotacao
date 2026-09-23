@@ -37,6 +37,7 @@
       <button class="tab-btn dropdown-toggle" type="button" id="btnConfigToggle">Configuração <span class="dropdown-arrow">&#9662;</span></button>
       <div class="tabs-dropdown-menu" id="configMenu" hidden>
         <button class="tab-btn dropdown-item" data-tab="venda">Parâmetros de Venda</button>
+        <button class="tab-btn dropdown-item" data-tab="backup">Backup / Migração de Dados</button>
       </div>
     </div>
   </nav>
@@ -338,6 +339,37 @@
 
       <button type="button" id="btnSalvarVenda" class="btn-primary">Salvar Parâmetros</button>
       <span class="save-msg" id="msgVenda"></span>
+    </div>
+  </section>
+
+  <!-- ===================== ABA BACKUP / MIGRAÇÃO DE DADOS ===================== -->
+  <section id="tab-backup" class="tab-panel">
+    <div class="card">
+      <h2>Exportar Todos os Dados</h2>
+      <p class="hint">
+        Gera um arquivo .json com todos os cadastros deste navegador (Cadastro ANTT, Custo por
+        KM, Custo Operação SPOT, ICMS, Parâmetros de Venda, Vendedores, Histórico de Cotações e
+        chaves de API). Use para migrar os dados entre dois endereços diferentes da calculadora
+        (ex.: do uso local para o site publicado, ou vice-versa) — cada endereço guarda seus
+        dados separadamente no navegador.
+      </p>
+      <button type="button" id="btnExportarBackup" class="btn-primary">Exportar Todos os Dados</button>
+    </div>
+
+    <div class="card">
+      <h2>Importar Todos os Dados</h2>
+      <p class="hint">
+        Escolha um arquivo .json gerado pelo botão "Exportar Todos os Dados" (em qualquer
+        endereço da calculadora). <b>Atenção:</b> isso substitui todos os cadastros deste
+        navegador pelos dados do arquivo — o que já estiver cadastrado aqui será perdido.
+      </p>
+      <div class="spot-import-row">
+        <label>Arquivo de backup (.json)
+          <input type="file" id="backupImportFile" accept=".json">
+        </label>
+        <button type="button" id="btnImportarBackup" class="btn-secondary">Importar Todos os Dados</button>
+      </div>
+      <span class="save-msg" id="msgBackupImport"></span>
     </div>
   </section>
 

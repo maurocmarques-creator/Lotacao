@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 13:53";
+const BUILD_TIMESTAMP = "23/09/2026 14:01";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -1021,13 +1021,20 @@ function calcularMkp() {
     (abaixo da Composição do Valor do Frete) — traz consigo os mesmos campos do Padrão
     (Custo Fixo/Impostos/Margem/Comissão/Ad Valorem), pro DRE também refletir o cenário
     escolhido. Nunca muda o cadastro Padrão — só troca o que é usado nesta cotação. */
+/** Nome do MKP Padrão mostrado no seletor e em qualquer lugar que registre qual MKP foi
+    usado — "MKP - 0,76", sempre com o valor atual calculado dos percentuais. */
+function nomeMkpPadrao() {
+  const { mkp } = calcularMkp();
+  return `MKP - ${mkp ? fmtNum(mkp, 2) : "indefinido"}`;
+}
+
 function mkpAtivo() {
   const idx = $("mkpSelecionado").value;
   if (idx !== "") {
     const escolhido = mkpTable[parseInt(idx, 10)];
-    if (escolhido) return { ...escolhido, ...mkpDePercentuais(escolhido), nome: escolhido.nome };
+    if (escolhido) return { ...escolhido, ...mkpDePercentuais(escolhido), nome: escolhido.nome, ehPadrao: false };
   }
-  return { ...vendaParams, ...calcularMkp(), nome: "Padrão (calculado dos percentuais)" };
+  return { ...vendaParams, ...calcularMkp(), nome: nomeMkpPadrao(), ehPadrao: true };
 }
 
 /* ------------------------------------------------------------
@@ -1336,7 +1343,8 @@ function atualizarComposicao() {
   state.compSpot = linhaSpot;
   state.compEfetivo = linhaEfetivo;
 
-  const partes = [`MKP: ${mkp ? `${fmtNum(mkp, 4)} (${mkpNome})` : "indefinido (percentuais somam 100% ou mais)"}`];
+  const rotuloMkp = mkp ? (ativo.ehPadrao ? fmtNum(mkp, 4) : `${fmtNum(mkp, 4)} (${mkpNome})`) : "indefinido (percentuais somam 100% ou mais)";
+  const partes = [`MKP: ${rotuloMkp}`];
   if (aliquota !== null) {
     partes.push(`ICMS ${ufOrigem || "?"} → ${ufDestino || "?"}: ${fmtNum(aliquota, 2)}% (${fonte})`);
   } else {
@@ -1734,6 +1742,7 @@ function atualizarPreviewVenda() {
   const { soma, mkp } = calcularMkp();
   $("somaPct").textContent = fmtNum(soma, 1) + "%";
   $("mkpValor").textContent = mkp ? fmtNum(mkp, 4) : "indefinido";
+  preencherSelectMkp();
   atualizarComposicao();
 }
 
@@ -1795,7 +1804,7 @@ function preencherSelectMkp() {
     const { mkp } = mkpDePercentuais(m);
     return `<option value="${idx}">${m.nome || "MKP " + (idx + 1)} — ${mkp ? fmtNum(mkp, 4) : "indefinido"}</option>`;
   });
-  sel.innerHTML = [`<option value="">Padrão (calculado dos percentuais)</option>`, ...opcoes].join("");
+  sel.innerHTML = [`<option value="">${nomeMkpPadrao()}</option>`, ...opcoes].join("");
   if (atual && atual < mkpTable.length) sel.value = atual;
 }
 
@@ -2229,7 +2238,7 @@ function abrirDetalheCotacao(id) {
     partes.push(linhaCampo("% Impostos Federais", `${fmtNum(c.pctImpostos, 1)}%`));
     partes.push(linhaCampo("% Margem Esperada", `${fmtNum(c.pctMargem, 1)}%`));
     partes.push(linhaCampo("% Comissão", `${fmtNum(c.pctComissao, 1)}%`));
-    partes.push(linhaCampo("MKP utilizado", c.mkp ? `${fmtNum(c.mkp, 4)}${c.mkpNome ? " — " + c.mkpNome : ""}` : "indefinido"));
+    partes.push(linhaCampo("MKP utilizado", c.mkp ? `${fmtNum(c.mkp, 4)}${c.mkpNome && !c.mkpNome.startsWith("MKP - ") ? " — " + c.mkpNome : ""}` : "indefinido"));
     partes.push(linhaCampo("% Ad Valorem", `${fmtNum(c.pctAdvalorem, 2)}%`));
   }
 
@@ -2397,7 +2406,7 @@ function abrirDreProjetado(id) {
     return;
   }
 
-  $("dreSubtitulo").textContent = `${c.origem || "?"} → ${c.destino || "?"} · ${fmtDataHora(c.criadoEm)} · Vendedor: ${c.vendedor || "—"} · MKP: ${c.mkp ? fmtNum(c.mkp, 4) : "—"}${c.mkpNome ? " (" + c.mkpNome + ")" : ""}`;
+  $("dreSubtitulo").textContent = `${c.origem || "?"} → ${c.destino || "?"} · ${fmtDataHora(c.criadoEm)} · Vendedor: ${c.vendedor || "—"} · MKP: ${c.mkp ? fmtNum(c.mkp, 4) : "—"}${c.mkpNome && !c.mkpNome.startsWith("MKP - ") ? " (" + c.mkpNome + ")" : ""}`;
 
   if (efetivoNaoSuportado || semEfetivo) {
     $("dreTabelaEfetivo").innerHTML = "";

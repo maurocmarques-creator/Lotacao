@@ -181,7 +181,7 @@
 
       <h3>Composição do Valor do Frete</h3>
       <p class="hint">Frete Peso = Custo &divide; MKP &middot; ICMS calculado "por dentro": Total = (Frete Peso + Ad Valorem + Pedágio) &divide; (1 &minus; alíquota)</p>
-      <div class="grid-3">
+      <div class="grid-4">
         <div class="composicao-col antt">
           <h4>Baseado no Custo ANTT</h4>
           <table class="composicao-table">
@@ -215,6 +215,18 @@
               <tr><td>Pedágio</td><td id="compSpotPedagio">R$ 0,00</td></tr>
               <tr><td>ICMS</td><td id="compSpotIcms">R$ 0,00</td></tr>
               <tr class="total"><td>Total Venda</td><td id="compSpotTotal">R$ 0,00</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="composicao-col efetivo" id="composicaoEfetivoCol">
+          <h4>Baseado no Custo Efetivo</h4>
+          <table class="composicao-table">
+            <tbody id="composicaoEfetivoBody">
+              <tr><td>Frete Peso</td><td id="compEfetivoFretePeso">R$ 0,00</td></tr>
+              <tr><td>Ad Valorem</td><td id="compEfetivoAdvalorem">R$ 0,00</td></tr>
+              <tr><td>Pedágio</td><td id="compEfetivoPedagio">R$ 0,00</td></tr>
+              <tr><td>ICMS</td><td id="compEfetivoIcms">R$ 0,00</td></tr>
+              <tr class="total"><td>Total Venda</td><td id="compEfetivoTotal">R$ 0,00</td></tr>
             </tbody>
           </table>
         </div>
@@ -540,20 +552,10 @@
     <div class="card">
       <h2>DRE Projetado <span id="dreNumeroCotacao"></span></h2>
       <p class="hint" id="dreSubtitulo"></p>
-      <div class="grid-3">
-        <div class="composicao-col antt">
-          <h4>Baseado no Custo ANTT</h4>
-          <table class="composicao-table dre-table" id="dreTabelaAntt"></table>
-        </div>
-        <div class="composicao-col aprox">
-          <h4>Baseado no Custo por KM</h4>
-          <table class="composicao-table dre-table" id="dreTabelaMerc"></table>
-        </div>
-        <div class="composicao-col spot">
-          <h4>Baseado no SPOT Cadastrado</h4>
-          <p class="sem-spot" id="dreSpotVazio" hidden>Sem SPOT cadastrado nesta cotação.</p>
-          <table class="composicao-table dre-table" id="dreTabelaSpot"></table>
-        </div>
+      <div class="composicao-col efetivo dre-single">
+        <h4>Baseado no Custo Efetivo</h4>
+        <p class="sem-spot" id="dreEfetivoVazio" hidden></p>
+        <table class="composicao-table dre-table" id="dreTabelaEfetivo"></table>
       </div>
       <div style="margin-top: 14px;">
         <button type="button" id="btnVoltarHistorico" class="btn-secondary">&larr; Voltar ao Histórico</button>

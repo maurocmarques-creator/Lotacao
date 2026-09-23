@@ -279,6 +279,11 @@ input:focus, select:focus { outline: none; border-color: var(--blue-500); box-sh
 .composicao-col.antt { background: var(--blue-100); }
 .composicao-col.aprox { background: var(--amber-100); }
 .composicao-col.spot { background: var(--green-100); }
+.composicao-col.efetivo { background: var(--blue-900); }
+.composicao-col.efetivo h4 { color: #fff; }
+.composicao-col.efetivo table.composicao-table td { color: #dbe6f7; border-bottom-color: rgba(255, 255, 255, 0.15); }
+.composicao-col.efetivo table.composicao-table tr.total td { border-top-color: rgba(255, 255, 255, 0.35); }
+.composicao-col.efetivo tr.total td:last-child { color: #fff; }
 table.composicao-table { width: 100%; border-collapse: collapse; }
 table.composicao-table td {
   padding: 7px 0;
@@ -298,8 +303,10 @@ table.composicao-table tr.total td {
 .composicao-col.aprox tr.total td:last-child { color: #8a5a10; }
 .composicao-col.spot tr.total td:last-child { color: var(--green-600); }
 .composicao-col .sem-spot { color: var(--gray-500); font-size: 13px; padding: 10px 0; font-style: italic; }
+.composicao-col.efetivo .sem-spot { color: #b9cdf0; }
 
 /* DRE Projetado */
+.dre-single { max-width: 440px; }
 .dre-table tr.dre-subitem td:first-child { padding-left: 18px; color: var(--gray-500); font-weight: 500; }
 .dre-table tr.dre-negativo td:last-child { color: #c0392b; }
 .dre-table tr.dre-subtotal td {

@@ -3,26 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 11:25";
-
-/* ============================================================
-   Persistência (localStorage) — troque por chamadas de API
-   quando este app virar SaaS.
-   ============================================================ */
-const STORAGE_KEYS = {
-  antt: "cf_antt_table_v1",
-  veiculos: "cf_vehicle_rates_v1",
-  venda: "cf_sale_params_v1",
-  icms: "cf_icms_table_v1",
-  ajusteKm: "cf_ajuste_km_v1",
-  orsApiKey: "cf_ors_api_key_v1",
-  qualpApiKey: "cf_qualp_api_key_v1",
-  anttConfig: "cf_antt_config_v1",
-  vendedores: "cf_vendedores_v1",
-  spot: "cf_spot_table_v1",
-  contadorCotacoes: "cf_contador_cotacoes_v1",
-  historico: "cf_historico_cotacoes_v1",
-};
+const BUILD_TIMESTAMP = "23/09/2026 11:54";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -72,66 +53,114 @@ const UF_DESTINO_ALIQUOTA_REDUZIDA = [
   "PA", "PB", "PE", "PI", "RN", "RO", "RR", "SE", "TO",
 ];
 
-function loadJSON(key, fallback) {
+/* ============================================================
+   Persistência compartilhada (Supabase) — os cadastros ficam num banco
+   de dados compartilhado, então todo mundo que acessa o site vê os
+   mesmos dados (ANTT, Custo por KM, SPOT, Vendedores, Histórico etc.),
+   em vez de cada navegador guardar sua própria cópia isolada.
+   ============================================================ */
+const SUPABASE_URL = "https://tgurfzpdpdxpodxewotv.supabase.co";
+const SUPABASE_KEY = "sb_publishable_9DHQudX1xPJEIRzSXGyCgA_u9qxgzWd";
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/** Lê um valor de configuração salvo em app_config; se não existir (ou der erro), volta o padrão. */
+async function carregarConfig(chave, padrao) {
   try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return structuredClone(fallback);
-    const parsed = JSON.parse(raw);
-    if (!parsed || (Array.isArray(fallback) && !Array.isArray(parsed))) return structuredClone(fallback);
-    return parsed;
+    const { data, error } = await db.from("app_config").select("value").eq("key", chave).maybeSingle();
+    if (error || !data || data.value === null || data.value === undefined) return structuredClone(padrao);
+    return data.value;
   } catch (e) {
-    return structuredClone(fallback);
+    return structuredClone(padrao);
   }
 }
-function saveJSON(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+/** Salva um valor de configuração em app_config, visível para todo mundo que acessa o site. */
+async function salvarConfig(chave, valor) {
+  try {
+    const { error } = await db.from("app_config").upsert({ key: chave, value: valor, updated_at: new Date().toISOString() });
+    if (error) console.error(`Falha ao salvar "${chave}" no banco:`, error);
+  } catch (e) {
+    console.error(`Falha ao salvar "${chave}" no banco:`, e);
+  }
+}
+/** Lê todas as cotações do histórico compartilhado (mais recente primeiro). */
+async function carregarHistorico() {
+  try {
+    const { data, error } = await db.from("historico_cotacoes").select("data").order("criado_em", { ascending: false });
+    if (error || !data) return [];
+    return data.map((row) => row.data);
+  } catch (e) {
+    return [];
+  }
+}
+/** Insere uma nova cotação no histórico compartilhado. */
+async function inserirCotacao(registro) {
+  const { error } = await db
+    .from("historico_cotacoes")
+    .insert({ id: registro.id, numero_formatado: registro.numeroFormatado, criado_em: registro.criadoEm, data: registro });
+  if (error) console.error("Falha ao salvar cotação no banco:", error);
+}
+/** Remove uma cotação do histórico compartilhado. */
+async function removerCotacao(id) {
+  const { error } = await db.from("historico_cotacoes").delete().eq("id", id);
+  if (error) console.error("Falha ao remover cotação no banco:", error);
+}
+/** Próximo número sequencial de cotação para o ano informado — gerado de forma atômica no
+    banco (função proximo_numero_cotacao), seguro mesmo com vários usuários salvando ao mesmo tempo. */
+async function proximoNumeroCotacao(ano) {
+  const { data, error } = await db.rpc("proximo_numero_cotacao", { p_ano: ano });
+  if (error) {
+    console.error("Falha ao gerar número da cotação:", error);
+    throw error;
+  }
+  return data;
 }
 
-let anttTable = loadJSON(STORAGE_KEYS.antt, DEFAULT_ANTT);
-// Migração: cadastros salvos antes do campo "nome" existir ganham o nome padrão do eixo.
-anttTable.forEach((row) => {
-  if (!row.nome) row.nome = NOMES_PADRAO_EIXOS[row.eixos] || "";
-});
-let veiculosTable = loadJSON(STORAGE_KEYS.veiculos, DEFAULT_VEICULOS);
-let vendaParams = loadJSON(STORAGE_KEYS.venda, DEFAULT_VENDA);
-let icmsTable = loadJSON(STORAGE_KEYS.icms, DEFAULT_ICMS);
-// Migração: quem salvou a aba ICMS antes de existir a tabela oficial ficou com cadastro
-// vazio — nesse caso, preenche com a tabela oficial em vez de deixar sem nenhuma alíquota.
-if (!Array.isArray(icmsTable) || icmsTable.length === 0) icmsTable = structuredClone(DEFAULT_ICMS);
-let ajusteKmPct = loadJSON(STORAGE_KEYS.ajusteKm, 0);
-let orsApiKey = loadJSON(STORAGE_KEYS.orsApiKey, "");
-let qualpApiKey = loadJSON(STORAGE_KEYS.qualpApiKey, "");
-let anttConfig = loadJSON(STORAGE_KEYS.anttConfig, { freightType: "A", loadType: "geral", isEmptyReturn: false });
-let vendedoresTable = loadJSON(STORAGE_KEYS.vendedores, []);
-let spotTable = loadJSON(STORAGE_KEYS.spot, []);
-let contadorCotacoes = loadJSON(STORAGE_KEYS.contadorCotacoes, {});
+let anttTable = structuredClone(DEFAULT_ANTT);
+let veiculosTable = structuredClone(DEFAULT_VEICULOS);
+let vendaParams = structuredClone(DEFAULT_VENDA);
+let icmsTable = structuredClone(DEFAULT_ICMS);
+let ajusteKmPct = 0;
+let orsApiKey = "";
+let qualpApiKey = "";
+let anttConfig = { freightType: "A", loadType: "geral", isEmptyReturn: false };
+let vendedoresTable = [];
+let spotTable = [];
+let historicoCotacoes = [];
 
-/** Gera o próximo número sequencial de cotação para o ano informado (reinicia a cada ano). */
-function proximoNumeroCotacao(ano) {
-  contadorCotacoes[ano] = (contadorCotacoes[ano] || 0) + 1;
-  saveJSON(STORAGE_KEYS.contadorCotacoes, contadorCotacoes);
-  return contadorCotacoes[ano];
-}
-let historicoCotacoes = loadJSON(STORAGE_KEYS.historico, []);
+/** Busca todos os cadastros e o histórico no Supabase; roda uma vez, antes da tela renderizar. */
+async function carregarDadosIniciais() {
+  const [antt, veiculos, venda, icms, ajusteKm, ors, qualp, anttCfg, vendedores, spot, historico] = await Promise.all([
+    carregarConfig("antt", DEFAULT_ANTT),
+    carregarConfig("veiculos", DEFAULT_VEICULOS),
+    carregarConfig("venda", DEFAULT_VENDA),
+    carregarConfig("icms", DEFAULT_ICMS),
+    carregarConfig("ajusteKm", 0),
+    carregarConfig("orsApiKey", ""),
+    carregarConfig("qualpApiKey", ""),
+    carregarConfig("anttConfig", { freightType: "A", loadType: "geral", isEmptyReturn: false }),
+    carregarConfig("vendedores", []),
+    carregarConfig("spot", []),
+    carregarHistorico(),
+  ]);
 
-// Migração única: cotações salvas antes de existir a numeração ficam sem "numeroFormatado".
-// Se alguma estiver assim, renumera TODO o histórico em ordem cronológica real (mais antiga = nº 1),
-// para o número sempre bater com a ordem em que as cotações foram criadas. Depois desta correção
-// todo registro passa a ter número, então isso não roda de novo nas próximas vezes.
-if (historicoCotacoes.some((c) => !c.numeroFormatado)) {
-  const porAno = {};
-  [...historicoCotacoes]
-    .sort((a, b) => new Date(a.criadoEm) - new Date(b.criadoEm))
-    .forEach((c) => {
-      const ano = new Date(c.criadoEm).getFullYear();
-      porAno[ano] = (porAno[ano] || 0) + 1;
-      c.numero = porAno[ano];
-      c.ano = ano;
-      c.numeroFormatado = `${c.numero}/${ano}`;
-    });
-  contadorCotacoes = porAno;
-  saveJSON(STORAGE_KEYS.historico, historicoCotacoes);
-  saveJSON(STORAGE_KEYS.contadorCotacoes, contadorCotacoes);
+  anttTable = antt;
+  // Migração: cadastros salvos antes do campo "nome" existir ganham o nome padrão do eixo.
+  anttTable.forEach((row) => {
+    if (!row.nome) row.nome = NOMES_PADRAO_EIXOS[row.eixos] || "";
+  });
+  veiculosTable = veiculos;
+  vendaParams = venda;
+  icmsTable = icms;
+  // Migração: quem salvou a aba ICMS antes de existir a tabela oficial ficou com cadastro
+  // vazio — nesse caso, preenche com a tabela oficial em vez de deixar sem nenhuma alíquota.
+  if (!Array.isArray(icmsTable) || icmsTable.length === 0) icmsTable = structuredClone(DEFAULT_ICMS);
+  ajusteKmPct = ajusteKm;
+  orsApiKey = ors;
+  qualpApiKey = qualp;
+  anttConfig = anttCfg;
+  vendedoresTable = vendedores;
+  spotTable = spot;
+  historicoCotacoes = historico;
 }
 
 /* ============================================================
@@ -690,9 +719,9 @@ function atualizarMapa() {
   setTimeout(() => mapaLeaflet && mapaLeaflet.invalidateSize(), 150);
 }
 
-$("ajusteKm").addEventListener("input", () => {
+$("ajusteKm").addEventListener("input", async () => {
   ajusteKmPct = parseFloat($("ajusteKm").value) || 0;
-  saveJSON(STORAGE_KEYS.ajusteKm, ajusteKmPct);
+  await salvarConfig("ajusteKm", ajusteKmPct);
   aplicarAjusteEExibir();
 });
 
@@ -1220,13 +1249,13 @@ function renderAnttConfig() {
   $("anttEmptyReturn").value = anttConfig.isEmptyReturn ? "true" : "false";
 }
 
-$("btnSalvarAnttConfig").addEventListener("click", () => {
+$("btnSalvarAnttConfig").addEventListener("click", async () => {
   anttConfig = {
     freightType: $("anttFreightType").value,
     loadType: $("anttLoadType").value,
     isEmptyReturn: $("anttEmptyReturn").value === "true",
   };
-  saveJSON(STORAGE_KEYS.anttConfig, anttConfig);
+  await salvarConfig("anttConfig", anttConfig);
   $("msgAnttConfig").textContent = "Parâmetros salvos.";
   setTimeout(() => ($("msgAnttConfig").textContent = ""), 2500);
 });
@@ -1273,8 +1302,8 @@ $("btnAddEixo").addEventListener("click", () => {
   renderTabelaAntt();
 });
 
-$("btnSalvarAntt").addEventListener("click", () => {
-  saveJSON(STORAGE_KEYS.antt, anttTable);
+$("btnSalvarAntt").addEventListener("click", async () => {
+  await salvarConfig("antt", anttTable);
   preencherSelects();
   $("msgAntt").textContent = "Cadastro salvo.";
   setTimeout(() => ($("msgAntt").textContent = ""), 2500);
@@ -1316,8 +1345,8 @@ $("btnAddVeiculo").addEventListener("click", () => {
   renderTabelaVeiculos();
 });
 
-$("btnSalvarVeiculos").addEventListener("click", () => {
-  saveJSON(STORAGE_KEYS.veiculos, veiculosTable);
+$("btnSalvarVeiculos").addEventListener("click", async () => {
+  await salvarConfig("veiculos", veiculosTable);
   preencherSelects();
   renderTabelaSpot(); // a lista de veículos do SPOT depende deste cadastro
   $("msgVeiculos").textContent = "Cadastro salvo.";
@@ -1388,8 +1417,8 @@ $("btnAddSpot").addEventListener("click", () => {
   renderTabelaSpot();
 });
 
-$("btnSalvarSpot").addEventListener("click", () => {
-  saveJSON(STORAGE_KEYS.spot, spotTable);
+$("btnSalvarSpot").addEventListener("click", async () => {
+  await salvarConfig("spot", spotTable);
   $("msgSpot").textContent = "Cadastro salvo.";
   setTimeout(() => ($("msgSpot").textContent = ""), 2500);
 });
@@ -1509,8 +1538,7 @@ async function importarPlanilhaSpot(file) {
     }
   });
 
-  saveJSON(STORAGE_KEYS.spot, spotTable);
-  saveJSON(STORAGE_KEYS.veiculos, veiculosTable);
+  await Promise.all([salvarConfig("spot", spotTable), salvarConfig("veiculos", veiculosTable)]);
   renderTabelaSpot();
   renderTabelaVeiculos();
   preencherSelects();
@@ -1574,29 +1602,34 @@ function atualizarPreviewVenda() {
   $(id).addEventListener("input", atualizarPreviewVenda);
 });
 
-$("btnSalvarVenda").addEventListener("click", () => {
-  saveJSON(STORAGE_KEYS.venda, vendaParams);
+$("btnSalvarVenda").addEventListener("click", async () => {
+  await salvarConfig("venda", vendaParams);
   $("msgVenda").textContent = "Parâmetros salvos.";
   setTimeout(() => ($("msgVenda").textContent = ""), 2500);
 });
 
 /* ============================================================
-   Aba Backup / Migração de Dados (exporta/importa tudo em .json —
-   usado para levar os cadastros de um endereço da calculadora para outro,
-   já que cada endereço/origem guarda seus dados separadamente no navegador)
+   Aba Backup / Migração de Dados (exporta/importa tudo em .json — serve
+   tanto de cópia de segurança quanto para trazer dados salvos antes desta
+   versão, de quando cada navegador guardava seu próprio localStorage, para
+   o banco compartilhado usado agora por todo mundo que acessa o site)
    ============================================================ */
+const CHAVES_CONFIG_BACKUP = ["antt", "veiculos", "venda", "icms", "ajusteKm", "orsApiKey", "qualpApiKey", "anttConfig", "vendedores", "spot"];
+
 function exportarBackupCompleto() {
-  const dados = {};
-  Object.keys(STORAGE_KEYS).forEach((chave) => {
-    const raw = localStorage.getItem(STORAGE_KEYS[chave]);
-    if (raw !== null) {
-      try {
-        dados[chave] = JSON.parse(raw);
-      } catch (e) {
-        /* ignora chave corrompida */
-      }
-    }
-  });
+  const dados = {
+    antt: anttTable,
+    veiculos: veiculosTable,
+    venda: vendaParams,
+    icms: icmsTable,
+    ajusteKm: ajusteKmPct,
+    orsApiKey,
+    qualpApiKey,
+    anttConfig,
+    vendedores: vendedoresTable,
+    spot: spotTable,
+    historico: historicoCotacoes,
+  };
 
   const payload = { app: "calculadora-frete", versao: 1, exportadoEm: new Date().toISOString(), dados };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -1610,18 +1643,43 @@ function exportarBackupCompleto() {
 
 $("btnExportarBackup").addEventListener("click", exportarBackupCompleto);
 
+/** Importa um backup para o banco compartilhado (substitui os cadastros e, se o arquivo
+    trouxer histórico, substitui o histórico inteiro e reajusta o contador de numeração das
+    cotações para continuar a partir do maior número importado). Aceita tanto um backup desta
+    versão quanto um exportado por uma versão anterior, de quando os dados ficavam no navegador. */
 async function importarBackupCompleto(file) {
   const texto = await file.text();
   const payload = JSON.parse(texto);
   const dados = payload && payload.dados ? payload.dados : payload; // aceita tb um JSON "cru" {antt:..., veiculos:...}
 
   let importadas = 0;
-  Object.keys(STORAGE_KEYS).forEach((chave) => {
+  for (const chave of CHAVES_CONFIG_BACKUP) {
     if (dados[chave] !== undefined) {
-      saveJSON(STORAGE_KEYS[chave], dados[chave]);
+      await salvarConfig(chave, dados[chave]);
       importadas++;
     }
-  });
+  }
+
+  if (Array.isArray(dados.historico)) {
+    await db.from("historico_cotacoes").delete().neq("id", "__nenhum__");
+    if (dados.historico.length) {
+      const linhas = dados.historico.map((c) => ({
+        id: c.id,
+        numero_formatado: c.numeroFormatado || null,
+        criado_em: c.criadoEm || new Date().toISOString(),
+        data: c,
+      }));
+      const { error } = await db.from("historico_cotacoes").insert(linhas);
+      if (error) console.error("Falha ao importar histórico:", error);
+    }
+    const porAno = {};
+    dados.historico.forEach((c) => {
+      if (c.ano && c.numero) porAno[c.ano] = Math.max(porAno[c.ano] || 0, c.numero);
+    });
+    await salvarConfig("contadorCotacoes", porAno);
+    importadas++;
+  }
+
   return importadas;
 }
 
@@ -1633,7 +1691,7 @@ $("btnImportarBackup").addEventListener("click", async () => {
     msg.textContent = "Selecione um arquivo .json primeiro.";
     return;
   }
-  if (!confirm("Isso vai substituir todos os cadastros deste navegador pelos dados do arquivo. Continuar?")) return;
+  if (!confirm("Isso vai substituir os cadastros (e o histórico, se houver no arquivo) para TODOS que acessam o site, pelos dados do arquivo. Continuar?")) return;
   msg.textContent = "Importando...";
   try {
     const importadas = await importarBackupCompleto(file);
@@ -1702,8 +1760,8 @@ $("btnAddIcms").addEventListener("click", () => {
   renderTabelaIcms();
 });
 
-$("btnSalvarIcms").addEventListener("click", () => {
-  saveJSON(STORAGE_KEYS.icms, icmsTable);
+$("btnSalvarIcms").addEventListener("click", async () => {
+  await salvarConfig("icms", icmsTable);
   atualizarComposicao();
   $("msgIcms").textContent = "Cadastro salvo.";
   setTimeout(() => ($("msgIcms").textContent = ""), 2500);
@@ -1712,32 +1770,32 @@ $("btnSalvarIcms").addEventListener("click", () => {
 /* ============================================================
    Aba Rota (chave OpenRouteService — perfil de caminhão/HGV)
    ============================================================ */
-$("btnSalvarOrs").addEventListener("click", () => {
+$("btnSalvarOrs").addEventListener("click", async () => {
   orsApiKey = $("orsApiKey").value.trim();
-  saveJSON(STORAGE_KEYS.orsApiKey, orsApiKey);
+  await salvarConfig("orsApiKey", orsApiKey);
   $("msgOrs").textContent = orsApiKey ? "Chave salva." : "Chave removida.";
   setTimeout(() => ($("msgOrs").textContent = ""), 2500);
 });
 
-$("btnLimparOrs").addEventListener("click", () => {
+$("btnLimparOrs").addEventListener("click", async () => {
   orsApiKey = "";
   $("orsApiKey").value = "";
-  saveJSON(STORAGE_KEYS.orsApiKey, "");
+  await salvarConfig("orsApiKey", "");
   $("msgOrs").textContent = "Chave removida.";
   setTimeout(() => ($("msgOrs").textContent = ""), 2500);
 });
 
-$("btnSalvarQualp").addEventListener("click", () => {
+$("btnSalvarQualp").addEventListener("click", async () => {
   qualpApiKey = $("qualpApiKey").value.trim();
-  saveJSON(STORAGE_KEYS.qualpApiKey, qualpApiKey);
+  await salvarConfig("qualpApiKey", qualpApiKey);
   $("msgQualp").textContent = qualpApiKey ? "Chave salva." : "Chave removida.";
   setTimeout(() => ($("msgQualp").textContent = ""), 2500);
 });
 
-$("btnLimparQualp").addEventListener("click", () => {
+$("btnLimparQualp").addEventListener("click", async () => {
   qualpApiKey = "";
   $("qualpApiKey").value = "";
-  saveJSON(STORAGE_KEYS.qualpApiKey, "");
+  await salvarConfig("qualpApiKey", "");
   $("msgQualp").textContent = "Chave removida.";
   setTimeout(() => ($("msgQualp").textContent = ""), 2500);
 });
@@ -1789,9 +1847,9 @@ $("btnAddVendedor").addEventListener("click", () => {
   renderTabelaVendedores();
 });
 
-$("btnSalvarVendedores").addEventListener("click", () => {
+$("btnSalvarVendedores").addEventListener("click", async () => {
   vendedoresTable = vendedoresTable.filter((v) => v.nome && v.nome.trim());
-  saveJSON(STORAGE_KEYS.vendedores, vendedoresTable);
+  await salvarConfig("vendedores", vendedoresTable);
   renderTabelaVendedores();
   preencherSelectVendedor();
   $("msgVendedores").textContent = "Cadastro salvo.";
@@ -1835,11 +1893,12 @@ function renderHistorico() {
   });
 
   tbody.querySelectorAll("[data-remove-cotacao]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
+    btn.addEventListener("click", async (e) => {
       e.stopPropagation();
-      historicoCotacoes = historicoCotacoes.filter((c) => c.id !== btn.dataset.removeCotacao);
-      saveJSON(STORAGE_KEYS.historico, historicoCotacoes);
+      const id = btn.dataset.removeCotacao;
+      historicoCotacoes = historicoCotacoes.filter((c) => c.id !== id);
       renderHistorico();
+      await removerCotacao(id);
     });
   });
 
@@ -2239,12 +2298,19 @@ $("btnExportarDreExcel").addEventListener("click", () => {
   setTimeout(() => ($("msgDreExcel").textContent = ""), 2500);
 });
 
-function salvarCotacao() {
+async function salvarCotacao() {
   if ($("resultsCard").hidden) return;
 
+  $("msgCotacao").textContent = "Salvando...";
   const agora = new Date();
   const ano = agora.getFullYear();
-  const numero = proximoNumeroCotacao(ano);
+  let numero;
+  try {
+    numero = await proximoNumeroCotacao(ano);
+  } catch (e) {
+    $("msgCotacao").textContent = "Erro ao salvar: não foi possível gerar o número da cotação.";
+    return;
+  }
 
   const registro = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -2319,12 +2385,13 @@ function salvarCotacao() {
   };
 
   historicoCotacoes.push(registro);
-  saveJSON(STORAGE_KEYS.historico, historicoCotacoes);
   renderHistorico();
   $("msgCotacao").textContent = `Cotação nº ${registro.numeroFormatado} salva no histórico.`;
   setTimeout(() => ($("msgCotacao").textContent = ""), 3500);
 
   limparFormularioParaNovaCotacao();
+
+  await inserirCotacao(registro);
 }
 
 /** Volta a Calculadora ao estado inicial depois de salvar, pronta para uma nova cotação. */
@@ -2661,20 +2728,34 @@ configurarAutocompleteCidade("cidadeDestino", "listCidadeDestino");
 carregarMunicipios(); // pré-carrega a lista de cidades em segundo plano
 
 /* ============================================================
-   Init
+   Init — busca os dados no banco compartilhado ANTES de renderizar
+   qualquer cadastro, para nunca mostrar telas vazias por um instante.
    ============================================================ */
-preencherSelects();
-renderAnttConfig();
-renderTabelaAntt();
-renderTabelaVeiculos();
-renderTabelaSpot();
-renderVenda();
-preencherFiltroIcms();
-renderTabelaIcms();
-$("ajusteKm").value = ajusteKmPct;
-$("orsApiKey").value = orsApiKey;
-$("qualpApiKey").value = qualpApiKey;
-renderTabelaVendedores();
-preencherSelectVendedor();
-renderHistorico();
-$("ultimaAtualizacao").textContent = BUILD_TIMESTAMP;
+async function iniciarApp() {
+  try {
+    await carregarDadosIniciais();
+  } catch (e) {
+    console.error("Falha ao carregar dados do banco:", e);
+    alert("Não foi possível carregar os dados do banco. Verifique sua conexão e recarregue a página.");
+  }
+
+  preencherSelects();
+  renderAnttConfig();
+  renderTabelaAntt();
+  renderTabelaVeiculos();
+  renderTabelaSpot();
+  renderVenda();
+  preencherFiltroIcms();
+  renderTabelaIcms();
+  $("ajusteKm").value = ajusteKmPct;
+  $("orsApiKey").value = orsApiKey;
+  $("qualpApiKey").value = qualpApiKey;
+  renderTabelaVendedores();
+  preencherSelectVendedor();
+  renderHistorico();
+  $("ultimaAtualizacao").textContent = BUILD_TIMESTAMP;
+
+  $("carregandoOverlay").hidden = true;
+}
+
+iniciarApp();

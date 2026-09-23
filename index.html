@@ -8,8 +8,15 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+<div id="carregandoOverlay" class="carregando-overlay">
+  <div class="carregando-caixa">
+    <div class="carregando-spinner"></div>
+    <p>Carregando dados...</p>
+  </div>
+</div>
 <header class="topbar">
   <div class="brand">
     <span class="brand-mark">🚛</span>
@@ -383,11 +390,10 @@
     <div class="card">
       <h2>Exportar Todos os Dados</h2>
       <p class="hint">
-        Gera um arquivo .json com todos os cadastros deste navegador (Cadastro ANTT, Custo por
-        KM, Custo Operação SPOT, ICMS, Parâmetros de Venda, Vendedores, Histórico de Cotações e
-        chaves de API). Use para migrar os dados entre dois endereços diferentes da calculadora
-        (ex.: do uso local para o site publicado, ou vice-versa) — cada endereço guarda seus
-        dados separadamente no navegador.
+        Gera um arquivo .json com todos os cadastros do banco compartilhado (Cadastro ANTT, Custo
+        por KM, Custo Operação SPOT, ICMS, Parâmetros de Venda, Vendedores, Histórico de Cotações
+        e chaves de API). Use como cópia de segurança, ou para trazer dados salvos numa versão
+        anterior deste app (de quando cada navegador guardava seus próprios cadastros).
       </p>
       <button type="button" id="btnExportarBackup" class="btn-primary">Exportar Todos os Dados</button>
     </div>
@@ -395,9 +401,9 @@
     <div class="card">
       <h2>Importar Todos os Dados</h2>
       <p class="hint">
-        Escolha um arquivo .json gerado pelo botão "Exportar Todos os Dados" (em qualquer
-        endereço da calculadora). <b>Atenção:</b> isso substitui todos os cadastros deste
-        navegador pelos dados do arquivo — o que já estiver cadastrado aqui será perdido.
+        Escolha um arquivo .json gerado pelo botão "Exportar Todos os Dados". <b>Atenção:</b> isso
+        substitui os cadastros do banco compartilhado pelos dados do arquivo, para
+        <b>todo mundo que acessa o site</b> — o que já estiver cadastrado será perdido.
       </p>
       <div class="spot-import-row">
         <label>Arquivo de backup (.json)
@@ -571,7 +577,7 @@
 </div>
 
 <footer>
-  <p>Dados salvos neste navegador (localStorage) &middot; distância via OpenStreetMap/OSRM, OpenRouteService ou QualP</p>
+  <p>Dados compartilhados entre todos os acessos &middot; distância via OpenStreetMap/OSRM, OpenRouteService ou QualP</p>
 </footer>
 
 <script src="app.js"></script>

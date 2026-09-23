@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 11:18";
+const BUILD_TIMESTAMP = "23/09/2026 11:22";
 
 /* ============================================================
    Persistência (localStorage) — troque por chamadas de API
@@ -446,7 +446,9 @@ function escolherRota(routes) {
  */
 async function calcularDistanciaOrsHgv(origem, destino, apiKey) {
   try {
-    const resp = await fetch("https://api.openrouteservice.org/v2/directions/driving-hgv", {
+    // Endpoint "/geojson" traz a geometria da rota já pronta pro mapa (coordinates em
+    // [lon, lat], padrão GeoJSON), sem precisar decodificar polyline.
+    const resp = await fetch("https://api.openrouteservice.org/v2/directions/driving-hgv/geojson", {
       method: "POST",
       headers: { Authorization: apiKey, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -458,11 +460,13 @@ async function calcularDistanciaOrsHgv(origem, destino, apiKey) {
     });
     if (!resp.ok) return null;
     const data = await resp.json();
-    const rota = data && data.routes && data.routes[0];
-    const resumo = rota && rota.summary;
+    const feature = data && data.features && data.features[0];
+    const resumo = feature && feature.properties && feature.properties.summary;
     if (!resumo || typeof resumo.distance !== "number") return null;
     const km = resumo.distance / 1000;
-    return { km, duracaoSeg: tempoViagemEstimadoSeg(km), fonte: "rota-caminhao" };
+    const coords = (feature.geometry && feature.geometry.coordinates) || [];
+    const geometria = coords.map(([lon, lat]) => [lat, lon]);
+    return { km, duracaoSeg: tempoViagemEstimadoSeg(km), fonte: "rota-caminhao", geometria };
   } catch (e) {
     return null;
   }
@@ -550,7 +554,9 @@ async function calcularDistanciaRodoviaria(origem, destino) {
     // Chave ausente/inválida ou serviço fora do ar: cai para o OSRM abaixo, sem travar o cálculo.
   }
   try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${origem.lon},${origem.lat};${destino.lon},${destino.lat}?overview=false&alternatives=true`;
+    // "geometries=geojson" traz o traçado da rota (coordinates em [lon, lat]) pro mapa,
+    // além da distância que já era usada.
+    const url = `https://router.project-osrm.org/route/v1/driving/${origem.lon},${origem.lat};${destino.lon},${destino.lat}?overview=full&geometries=geojson&alternatives=true`;
     const resp = await fetch(url);
     const data = await resp.json();
     if (data && data.routes && data.routes.length) {
@@ -560,20 +566,26 @@ async function calcularDistanciaRodoviaria(origem, destino) {
         if (escolhida) rota = escolhida;
       }
       const km = rota.distance / 1000;
-      return { km, duracaoSeg: tempoViagemEstimadoSeg(km), fonte: "rota" };
+      const coords = (rota.geometry && rota.geometry.coordinates) || [];
+      const geometria = coords.map(([lon, lat]) => [lat, lon]);
+      return { km, duracaoSeg: tempoViagemEstimadoSeg(km), fonte: "rota", geometria };
     }
   } catch (e) {
     /* ignora e cai no fallback */
   }
   const reta = haversineKm(origem.lat, origem.lon, destino.lat, destino.lon);
   const km = reta * 1.3;
-  return { km, duracaoSeg: tempoViagemEstimadoSeg(km), fonte: "estimativa" };
+  return { km, duracaoSeg: tempoViagemEstimadoSeg(km), fonte: "estimativa", geometria: [[origem.lat, origem.lon], [destino.lat, destino.lon]] };
 }
 
 // Guarda o último KM bruto (antes do ajuste) e sua fonte, para recalcular na hora
 // quando o usuário mexer no % de ajuste, sem precisar refazer a consulta de rota.
 let ultimoKmBruto = null;
 let ultimaFonteKm = null;
+// Traçado real da rota (lista de [lat, lon]), quando a fonte devolve geometria (OSRM/ORS).
+// null quando a fonte não traz geometria (QualP) ou a rota ainda não foi calculada — nesse
+// caso o Mapa da Rota cai pra linha reta entre Origem e Destino.
+let ultimaRotaGeometria = null;
 
 function aplicarAjusteEExibir() {
   if (ultimoKmBruto === null) return;
@@ -638,13 +650,13 @@ function atualizarMapa() {
   if (!mapaLeaflet) return; // Leaflet não carregou (ex.: sem internet no momento)
 
   mapaCamadaMarcadores.clearLayers();
-  const pontosRota = [];
+  const pontosParaEnquadrar = [];
 
   const origemLatLon = [ultimoOrigemMapa.lat, ultimoOrigemMapa.lon];
   L.marker(origemLatLon, { icon: iconeMapaEmoji("🟢") })
     .addTo(mapaCamadaMarcadores)
     .bindPopup(`<b>Origem</b><br>${ultimoOrigemMapa.label}`);
-  pontosRota.push(origemLatLon);
+  pontosParaEnquadrar.push(origemLatLon);
 
   const destinoNorm = normalizeStr(ultimoDestinoMapa.label);
   ultimosCandidatosDestinoGeo
@@ -654,18 +666,27 @@ function atualizarMapa() {
       L.marker(latlon, { icon: iconeMapaEmoji("🚩") })
         .addTo(mapaCamadaMarcadores)
         .bindPopup(`<b>Parada</b><br>${p.texto}`);
-      pontosRota.push(latlon);
+      // Linha fina tracejada só de referência, ligando a origem à parada (não é a rota real).
+      L.polyline([origemLatLon, latlon], { color: "#8a94a6", weight: 2, dashArray: "4 6", opacity: 0.6 }).addTo(mapaCamadaMarcadores);
+      pontosParaEnquadrar.push(latlon);
     });
 
   const destinoLatLon = [ultimoDestinoMapa.lat, ultimoDestinoMapa.lon];
   L.marker(destinoLatLon, { icon: iconeMapaEmoji("🏁") })
     .addTo(mapaCamadaMarcadores)
     .bindPopup(`<b>Destino</b><br>${ultimoDestinoMapa.label}`);
-  pontosRota.push(destinoLatLon);
+  pontosParaEnquadrar.push(destinoLatLon);
 
-  L.polyline(pontosRota, { color: "#1d5db1", weight: 3, dashArray: "6 8", opacity: 0.75 }).addTo(mapaCamadaMarcadores);
+  // Traçado real da rota (rodoviário), quando a fonte do KM trouxe a geometria (OSRM/ORS).
+  // Sem geometria disponível (ex.: fonte QualP), cai numa linha reta só de referência.
+  if (ultimaRotaGeometria && ultimaRotaGeometria.length > 1) {
+    L.polyline(ultimaRotaGeometria, { color: "#1d5db1", weight: 4, opacity: 0.85 }).addTo(mapaCamadaMarcadores);
+    pontosParaEnquadrar.push(...ultimaRotaGeometria);
+  } else {
+    L.polyline([origemLatLon, destinoLatLon], { color: "#1d5db1", weight: 3, dashArray: "6 8", opacity: 0.75 }).addTo(mapaCamadaMarcadores);
+  }
 
-  mapaLeaflet.fitBounds(pontosRota, { padding: [30, 30], maxZoom: 12 });
+  mapaLeaflet.fitBounds(pontosParaEnquadrar, { padding: [30, 30], maxZoom: 12 });
   setTimeout(() => mapaLeaflet && mapaLeaflet.invalidateSize(), 150);
 }
 
@@ -863,6 +884,8 @@ async function executarCalculoKm() {
         if (resultadoQualp) {
           ultimoKmBruto = resultadoQualp.km;
           ultimaFonteKm = "qualp";
+          // A API QualP não devolve a geometria da rota — o mapa cai pra linha reta nesse caso.
+          ultimaRotaGeometria = null;
           aplicarAjusteEExibir();
 
           $("pedagio").value = resultadoQualp.pedagio.toFixed(2);
@@ -883,6 +906,7 @@ async function executarCalculoKm() {
     const resultado = await calcularDistanciaRodoviaria(origem.coords, destino.coords);
     ultimoKmBruto = resultado.km;
     ultimaFonteKm = resultado.fonte;
+    ultimaRotaGeometria = resultado.geometria || null;
     aplicarAjusteEExibir();
   } finally {
     btn.disabled = false;
@@ -2350,6 +2374,7 @@ function limparFormularioParaNovaCotacao() {
   ultimoOrigemMapa = null;
   ultimoDestinoMapa = null;
   ultimosCandidatosDestinoGeo = [];
+  ultimaRotaGeometria = null;
   if (mapaCamadaMarcadores) mapaCamadaMarcadores.clearLayers();
 
   $("resultsCard").hidden = true;

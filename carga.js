@@ -366,50 +366,31 @@
     }
     $("fcSideSvg").innerHTML = s + "</svg>";
   }
-  /** Agrupa as caixas em "pilhas" (volumes empilhados numa mesma posição): cada caixa do
-   * piso começa sua própria pilha; toda caixa em cima entra na pilha do apoio com quem
-   * tem MAIOR área de sobreposição (o apoio "principal") — não junta pilhas vizinhas só
-   * porque uma caixa de cima invade um pouco o espaço da pilha ao lado. */
-  function buildPiles(P) {
-    const ownerOf = new Map(), groups = new Map();
-    P.slice().sort((a, b) => a.z - b.z).forEach((b) => {
-      let rep;
-      if (!b.sup.length) {
-        rep = b;
-      } else {
-        let melhor = b.sup[0], melhorArea = -1;
-        for (const s of b.sup) {
-          const ox = Math.min(b.x + b.l, s.x + s.l) - Math.max(b.x, s.x);
-          const oy = Math.min(b.y + b.w, s.y + s.w) - Math.max(b.y, s.y);
-          const area = Math.max(0, ox) * Math.max(0, oy);
-          if (area > melhorArea) { melhorArea = area; melhor = s; }
-        }
-        rep = ownerOf.get(melhor);
-      }
-      ownerOf.set(b, rep);
-      if (!groups.has(rep)) groups.set(rep, []);
-      groups.get(rep).push(b);
-    });
-    return Array.from(groups.values());
-  }
-  /** Desenha uma miniatura por pilha, vista de frente (olhando da cabine para a traseira):
-   * eixo horizontal = largura (mesma orientação esquerda/direita do Mapa visto de cima),
-   * eixo vertical = altura. Caixas mais próximas da cabine são desenhadas por cima. */
+  /** Desenha um corte transversal do baú (largura × altura) a cada posição em que uma
+   * caixa do piso começa — como se alguém entrasse no baú e olhasse reto pra frente
+   * (cabine → traseira) parado exatamente naquele ponto. Mostra TODA caixa que passa por
+   * ali, mesmo que ela pertença "principalmente" à posição vizinha — uma caixa larga que
+   * morde duas pilhas aparece inteira nos dois cortes, sem misturar tudo numa imagem só
+   * confusa. Caixas mais próximas da cabine (de quem olha) são desenhadas por cima. */
   function drawPiles() {
     const wrap = $("fcPiles");
     if (!wrap) return;
     if (!R || !R.order.length) { wrap.innerHTML = ""; return; }
-    const piles = buildPiles(R.order).map((boxes) => ({ boxes, x0: Math.min(...boxes.map((b) => b.x)) })).sort((a, b) => a.x0 - b.x0);
-    wrap.innerHTML = piles.map((pile, idx) => {
-      const boxes = pile.boxes.slice().sort((a, b) => (b.x + b.d.l) - (a.x + a.d.l));
-      let s = `<svg class="fc-plan fc-pile-svg" viewBox="-2 -2 ${C.W + 4} ${C.H + 4}" role="img" aria-label="Pilha ${idx + 1}, vista de frente"><rect class="fc-bed" x="0" y="0" width="${C.W}" height="${C.H}"/>`;
+    const chao = R.order.filter((b) => b.level === 1).slice().sort((a, b) => a.x - b.x);
+    const cortes = [];
+    for (const b of chao) {
+      const xc = b.x + b.l / 2;
+      if (!cortes.length || xc - cortes[cortes.length - 1] > 5) cortes.push(xc);
+    }
+    wrap.innerHTML = cortes.map((xc, idx) => {
+      const boxes = R.order.filter((b) => b.x <= xc + EPS && b.x + b.l >= xc - EPS).sort((a, b) => (b.x + b.l) - (a.x + a.l));
+      let s = `<svg class="fc-plan fc-pile-svg" viewBox="-2 -2 ${C.W + 4} ${C.H + 4}" role="img" aria-label="Corte ${idx + 1}, vista de frente"><rect class="fc-bed" x="0" y="0" width="${C.W}" height="${C.H}"/>`;
       for (const b of boxes) {
         const x = C.W - (b.y + b.d.w), y = C.H - (b.z + b.d.h);
         s += `<rect class="fc-bx" x="${x}" y="${y}" width="${b.d.w}" height="${b.d.h}" fill="${color(b.it.ti)}"/>` + lbl(b, b.d.w, b.d.h, x, y);
       }
       s += "</svg>";
-      const seqs = pile.boxes.map((b) => b.seq).sort((a, b) => a - b);
-      return `<div class="fc-pile-item"><h4>Pilha ${idx + 1} <span class="hint">(#${seqs.join(", #")} · ${fmt(pile.x0 / 100)} m da cabine)</span></h4>${s}</div>`;
+      return `<div class="fc-pile-item"><h4>Posição ${idx + 1} <span class="hint">(${fmt(xc / 100)} m da cabine)</span></h4>${s}</div>`;
     }).join("");
   }
 

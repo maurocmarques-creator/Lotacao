@@ -92,6 +92,7 @@
 #tab-carga table.fc-seq tbody tr { cursor: pointer; }
 #tab-carga table.fc-seq tbody tr:hover, #tab-carga table.fc-seq tbody tr.fc-cur { background: var(--blue-100); }
 #tab-carga .fc-pill { font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--gray-100); border: 1px solid var(--gray-200); color: var(--gray-500); }
+#tab-carga td.fc-etiqueta { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
 #tab-carga .fc-out { margin: 4px 0 0; padding-left: 18px; color: #c0392b; font-size: 13px; }
 #tab-carga .fc-busy { opacity: .55; pointer-events: none; }
 

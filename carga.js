@@ -392,6 +392,7 @@
       const x1 = i + 1 < pontos.length ? pontos[i + 1] : C.L;
       const xc = (x0 + x1) / 2;
       const boxes = R.order.filter((b) => b.x <= xc + EPS && b.x + b.l >= xc - EPS).sort((a, b) => a.seq - b.seq);
+      if (!boxes.length) return; // espaço vazio sobrando (depois da última caixa) — não mostra
       const assinatura = boxes.map((b) => b.seq).join(",");
       if (assinatura === assinaturaAnterior) return; // igual ao corte anterior, não repete
       assinaturaAnterior = assinatura;
@@ -414,7 +415,7 @@
       const it = b.it, d = b.d; const obs = [];
       if (d.h !== it.h) obs.push("deitada"); else if (d.l !== it.l) obs.push("girada 90°");
       if (b.sup.length) obs.push("sobre #" + b.sup.map((s) => s.seq).join(", #"));
-      return `<tr data-s="${b.seq}"><td>${b.seq}</td><td><span class="fc-chip" style="background:${color(it.ti)};width:20px;height:20px;font-size:10.5px">${letter(it.ti)}</span></td>
+      return `<tr data-s="${b.seq}"><td>${b.seq}</td><td class="fc-etiqueta"><span class="fc-chip" style="background:${color(it.ti)};width:20px;height:20px;font-size:10.5px">${letter(it.ti)}</span><span>${b.tIdx}/${b.tTotal} - ${letter(it.ti)}</span></td>
         <td>${d.l}×${d.w}×${d.h}</td><td>${fmt(b.x / 100)} m</td><td>${fmt(b.y / 100)} m</td><td>${fmt(b.z / 100)} m</td>
         <td><span class="fc-pill">${b.level === 1 ? "piso" : b.level + "º"}</span></td><td>${obs.join(" · ")}</td></tr>`;
     }).join("");

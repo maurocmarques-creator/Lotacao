@@ -383,20 +383,27 @@
     const wrap = $("fcPiles");
     if (!wrap) return;
     if (!R || !R.order.length) { wrap.innerHTML = ""; return; }
-    const marcos = new Set([0]);
-    R.order.forEach((b) => { marcos.add(b.x); marcos.add(b.x + b.l); });
-    const pontos = Array.from(marcos).filter((x) => x < C.L - EPS).sort((a, b) => a - b);
+    // Cada "posição" = uma pilha de verdade, ancorada nos começos das caixas do piso
+    // (nível 1). Começos a poucos cm um do outro (mesma fileira, só com folga/rotação
+    // diferente) viram uma única posição — senão cada pequena diferença de profundidade
+    // entre uma caixa de cima e a de baixo gera um cartão quase repetido.
+    const TOL = 20; // cm — começos do piso mais próximos que isso contam como a mesma fileira
+    const starts = Array.from(new Set(R.order.filter((b) => b.level === 1).map((b) => b.x))).sort((a, b) => a - b);
+    const marcos = [];
+    starts.forEach((x) => {
+      const ult = marcos[marcos.length - 1];
+      if (ult === undefined || x - ult > TOL) marcos.push(x);
+    });
     let assinaturaAnterior = null;
     const posicoes = [];
-    pontos.forEach((x0, i) => {
-      const x1 = i + 1 < pontos.length ? pontos[i + 1] : C.L;
-      const xc = (x0 + x1) / 2;
-      const boxes = R.order.filter((b) => b.x <= xc + EPS && b.x + b.l >= xc - EPS).sort((a, b) => a.seq - b.seq);
-      if (!boxes.length) return; // espaço vazio sobrando (depois da última caixa) — não mostra
+    marcos.forEach((s, i) => {
+      const e = i + 1 < marcos.length ? marcos[i + 1] : C.L;
+      const boxes = R.order.filter((b) => b.x < e - EPS && b.x + b.l > s + EPS).sort((a, b) => a.seq - b.seq);
+      if (!boxes.length) return;
       const assinatura = boxes.map((b) => b.seq).join(",");
-      if (assinatura === assinaturaAnterior) return; // igual ao corte anterior, não repete
+      if (assinatura === assinaturaAnterior) return; // igual à posição anterior, não repete
       assinaturaAnterior = assinatura;
-      posicoes.push({ xc, boxes });
+      posicoes.push({ xc: (s + e) / 2, boxes });
     });
     wrap.innerHTML = posicoes.map(({ xc, boxes: lista }, idx) => {
       const boxes = lista.slice().sort((a, b) => (b.x + b.d.l) - (a.x + a.d.l));

@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "24/09/2026 09:23";
+const BUILD_TIMESTAMP = "24/09/2026 10:05";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -3357,10 +3357,11 @@ function calcularDreManual() {
 
   $("dreManualVazio").hidden = true;
   const icms = freteTotal * (aliquota / 100);
-  // custoBase soma pedágio + custo extra ao custo de contratação puro — calcularDreLado
-  // desfaz essa soma pra mostrar "Custo da Contratação" como sua própria linha, sem contar
-  // pedágio/extra duas vezes (mesma composição que o Custo Efetivo automático já tem).
-  const custoBase = custoContratacao + pedagio + custoExtra;
+  // O Custo Contratação digitado já é tratado como incluindo o pedágio embutido — o
+  // calcularDreLado desfaz isso (custoOperacao − pedágio − extra) pra mostrar, na linha
+  // "Custo da Contratação" do DRE, só o valor digitado MENOS o pedágio digitado; o Custo
+  // Extra continua à parte, como sua própria linha, sem entrar nessa subtração.
+  const custoBase = custoContratacao + custoExtra;
   const dManual = calcularDreLado(
     freteTotal,
     custoBase,

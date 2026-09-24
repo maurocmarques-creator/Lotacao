@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 22:16";
+const BUILD_TIMESTAMP = "23/09/2026 23:11";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -1011,6 +1011,25 @@ async function executarCalculoKm() {
 }
 
 $("btnCalcularKm").addEventListener("click", executarCalculoKm);
+
+/** Abre o QualP numa aba nova já com Origem/Destino/Eixos preenchidos (via userscript
+ * do Tampermonkey instalado no navegador — sem isso instalado, só abre a página normal
+ * do QualP vazia). Não calcula pedágio sozinho: fica só o botão CALCULAR lá pro usuário
+ * apertar, como conferência manual da rota. */
+$("btnAbrirQualp").addEventListener("click", () => {
+  const origem = $("cidadeOrigem").value.trim();
+  const destino = $("cidadeDestino").value.trim();
+  const eixos = parseInt($("qtdEixos").value, 10);
+  if (!origem || !destino) {
+    alert("Preencha Origem e Destino antes de abrir no QualP.");
+    return;
+  }
+  const url = new URL("https://qualp.com.br/");
+  url.searchParams.set("autoOrigem", origem);
+  url.searchParams.set("autoDestino", destino);
+  if (eixos) url.searchParams.set("autoEixos", String(eixos));
+  window.open(url.toString() + "#/", "_blank");
+});
 
 /** Recalcula os custos na hora se já existir um resultado na tela (evita mostrar um
  * resultado "do nada", com R$0,00, antes do primeiro clique em "Calcular Custos"). */

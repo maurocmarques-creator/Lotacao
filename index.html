@@ -271,10 +271,12 @@
     <div class="card">
       <h2>DRE Manual</h2>
       <p class="hint">
-        Digite os valores manualmente (sem calcular ANTT/KM/SPOT) — o Custo Contratação
-        informado aqui entra direto no DRE abaixo, no lugar do Custo Efetivo automático. O
-        resto da conta (formação de preço via MKP, ICMS, DRE completo) é automático, igual ao
-        resto do app. Isso não usa nem altera nenhuma cotação salva no Histórico.
+        Digite os valores manualmente (sem calcular ANTT/KM/SPOT/preço de venda) — o Valor do
+        Frete informado aqui é usado direto nas contas abaixo (sem nenhuma conta em cima dele),
+        e o Custo Contratação entra no lugar do Custo Efetivo automático. O resto do DRE
+        (Impostos Federais, ICMS, Comissão, Custo Fixo etc., pelos percentuais do MKP
+        escolhido) é automático, igual ao resto do app. Isso não usa nem altera nenhuma
+        cotação salva no Histórico.
       </p>
 
       <div class="grid-2">
@@ -300,6 +302,10 @@
           <select id="mkpSelecionadoManual"></select>
         </label>
       </div>
+
+      <label>Valor do Frete (R$) <span class="campo-lado-tag">usado direto no DRE, sem nenhuma conta em cima</span>
+        <input type="number" id="dreManualFreteTotal" placeholder="0,00" min="0" step="0.01" value="0">
+      </label>
 
       <div class="grid-3">
         <label>Custo Contratação (R$)

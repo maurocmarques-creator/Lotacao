@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "24/09/2026 09:02";
+const BUILD_TIMESTAMP = "24/09/2026 09:23";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -3318,53 +3318,53 @@ configurarAutocompleteCidadeElementos($("dreManualDestino"), $("listDreManualDes
   calcularDreManual();
 });
 
-/** Calcula e mostra o DRE Manual a partir só do que foi digitado nesta aba — mesma fórmula
- * (custo → preço via MKP → ICMS "por dentro" → DRE completo) usada na Calculadora, só que
- * partindo de um Custo Contratação digitado à mão em vez do Custo Efetivo (ANTT/KM/SPOT). */
+/** Calcula e mostra o DRE Manual a partir só do que foi digitado nesta aba. O Valor do Frete
+ * é digitado direto (nenhuma conta em cima dele, nem MKP nem nada) e usado como Frete Total
+ * do DRE; o ICMS em cima dele é calculado "por dentro" (icms = frete × alíquota/100) pela
+ * mesma alíquota cadastrada na aba ICMS pra essa Origem/Destino. O resto do DRE (Impostos
+ * Federais, Comissão, Custo Fixo) usa os percentuais do MKP escolhido, igual ao resto do app. */
 function calcularDreManual() {
+  const freteTotal = parseFloat($("dreManualFreteTotal").value) || 0;
   const custoContratacao = parseFloat($("dreManualCustoContratacao").value) || 0;
   const pedagio = parseFloat($("dreManualPedagio").value) || 0;
   const custoExtra = parseFloat($("dreManualCustoExtra").value) || 0;
   const valorMercadoria = parseFloat($("dreManualValorMercadoria").value) || 0;
 
-  if (!dreManualUfOrigem || !dreManualUfDestino || !custoContratacao) {
+  if (!dreManualUfOrigem || !dreManualUfDestino || !freteTotal) {
     $("dreManualTabela").innerHTML = "";
     $("dreManualVazio").hidden = false;
+    $("dreManualVazio").textContent = "Preencha Origem, Destino e o Valor do Frete para calcular.";
     $("dreManualPctBox").hidden = true;
     $("dreManualIcmsInfo").textContent = "";
     return;
   }
 
   const ativo = mkpAtivoManual();
-  const pctAdval = Number(ativo.pctAdvalorem) || 0;
-  const advalorem = valorMercadoria * (pctAdval / 100);
   const { aliquota, fonte } = obterAliquotaIcms(dreManualUfOrigem, dreManualUfDestino);
 
-  const rotuloMkp = ativo.mkp ? (ativo.ehPadrao ? fmtNum(ativo.mkp, 4) : `${fmtNum(ativo.mkp, 4)} (${ativo.nome})`) : "indefinido (percentuais somam 100% ou mais)";
-  const partesInfo = [`MKP: ${rotuloMkp}`];
+  const rotuloMkp = ativo.ehPadrao ? ativo.nome : `${ativo.nome} (percentuais)`;
+  const partesInfo = [`Percentuais: ${rotuloMkp}`];
   partesInfo.push(aliquota !== null ? `ICMS ${dreManualUfOrigem} → ${dreManualUfDestino}: ${fmtNum(aliquota, 2)}% (${fonte})` : `ICMS: ${fonte}`);
   $("dreManualIcmsInfo").textContent = partesInfo.join(" · ");
 
-  // custoBase soma pedágio + custo extra ao custo de contratação puro — mesma composição que
-  // o Custo Efetivo automático já tem embutida (calcular() faz igual pros custos ANTT/KM/SPOT).
-  const custoBase = custoContratacao + pedagio + custoExtra;
-  const linha = calcularLinhaComposicao(custoBase, ativo.mkp, advalorem, pedagio, aliquota);
-
-  if (!linha || linha.total === null || linha.total === undefined) {
+  if (aliquota === null) {
     $("dreManualTabela").innerHTML = "";
     $("dreManualVazio").hidden = false;
-    $("dreManualVazio").textContent = !ativo.mkp
-      ? "MKP indefinido — os percentuais de venda somam 100% ou mais."
-      : "Sem alíquota de ICMS cadastrada para essa Origem/Destino — cadastre na aba ICMS.";
+    $("dreManualVazio").textContent = "Sem alíquota de ICMS cadastrada para essa Origem/Destino — cadastre na aba ICMS.";
     $("dreManualPctBox").hidden = true;
     return;
   }
 
   $("dreManualVazio").hidden = true;
+  const icms = freteTotal * (aliquota / 100);
+  // custoBase soma pedágio + custo extra ao custo de contratação puro — calcularDreLado
+  // desfaz essa soma pra mostrar "Custo da Contratação" como sua própria linha, sem contar
+  // pedágio/extra duas vezes (mesma composição que o Custo Efetivo automático já tem).
+  const custoBase = custoContratacao + pedagio + custoExtra;
   const dManual = calcularDreLado(
-    linha.total,
+    freteTotal,
     custoBase,
-    linha.icms,
+    icms,
     pedagio,
     valorMercadoria,
     ativo.pctImpostos,
@@ -3377,13 +3377,14 @@ function calcularDreManual() {
 
   if (valorMercadoria > 0) {
     $("dreManualPctBox").hidden = false;
-    $("dreManualPct").textContent = fmtNum((linha.total / valorMercadoria) * 100, 2) + "%";
+    $("dreManualPct").textContent = fmtNum((freteTotal / valorMercadoria) * 100, 2) + "%";
   } else {
     $("dreManualPctBox").hidden = true;
   }
 }
 
 [
+  "dreManualFreteTotal",
   "dreManualCustoContratacao",
   "dreManualPedagio",
   "dreManualCustoExtra",

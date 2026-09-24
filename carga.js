@@ -249,6 +249,12 @@
       done.add(pick); order.push(pick); rest = rest.filter((b) => b !== pick);
     }
     order.forEach((b, i) => (b.seq = i + 1));
+    // Índice da caixa dentro do próprio tipo (1ª, 2ª... do tipo F), na ordem de
+    // carregamento — usado na etiqueta dos mapas (ex.: "2/3 - F" = a 2ª de 3 caixas do
+    // tipo F). O "#" da tabela de sequência continua sendo a ordem geral (b.seq).
+    const porTipo = {};
+    order.forEach((b) => { porTipo[b.it.ti] = (porTipo[b.it.ti] || 0) + 1; b.tIdx = porTipo[b.it.ti]; });
+    order.forEach((b) => { b.tTotal = porTipo[b.it.ti]; });
     res.order = order;
     return res;
   }
@@ -344,9 +350,9 @@
     return s;
   }
   function lbl(b, wd, ht, x, y) {
-    const txt = `${b.seq}/${letter(b.it.ti)}`;
-    const fs = Math.min(22, wd * 0.16 * (2 / txt.length), ht * 0.4);
-    return fs >= 7 ? `<text class="fc-lb" x="${x + wd / 2}" y="${y + ht / 2}" font-size="${fs.toFixed(1)}">${txt}</text>` : "";
+    const txt = `${b.tIdx}/${b.tTotal} - ${letter(b.it.ti)}`;
+    const fs = Math.min(18, (wd * 1.55) / txt.length, ht * 0.4);
+    return fs >= 6 ? `<text class="fc-lb" x="${x + wd / 2}" y="${y + ht / 2}" font-size="${fs.toFixed(1)}">${txt}</text>` : "";
   }
   function drawTop() {
     const P = R.order.filter((b) => !curLevel || b.level === curLevel).slice().sort((a, b) => a.z - b.z || a.seq - b.seq);
@@ -366,25 +372,34 @@
     }
     $("fcSideSvg").innerHTML = s + "</svg>";
   }
-  /** Desenha um corte transversal do baú (largura × altura) a cada posição em que uma
-   * caixa do piso começa — como se alguém entrasse no baú e olhasse reto pra frente
-   * (cabine → traseira) parado exatamente naquele ponto. Mostra TODA caixa que passa por
-   * ali, mesmo que ela pertença "principalmente" à posição vizinha — uma caixa larga que
-   * morde duas pilhas aparece inteira nos dois cortes, sem misturar tudo numa imagem só
-   * confusa. Caixas mais próximas da cabine (de quem olha) são desenhadas por cima. */
+  /** Desenha um corte transversal do baú (largura × altura) — como se alguém entrasse no
+   * baú e olhasse reto pra frente (cabine → traseira), parado num certo ponto. Mostra
+   * TODA caixa que passa por ali, mesmo que ela também apareça no corte vizinho (uma caixa
+   * larga que ocupa duas posições aparece inteira nos dois). Um corte novo só aparece onde
+   * o conjunto de caixas visível realmente muda (início ou fim de alguma caixa) — dois
+   * pontos com exatamente as mesmas caixas viram um corte só, sem repetir imagem igual.
+   * Caixas mais próximas da cabine (de quem olha) são desenhadas por cima. */
   function drawPiles() {
     const wrap = $("fcPiles");
     if (!wrap) return;
     if (!R || !R.order.length) { wrap.innerHTML = ""; return; }
-    const chao = R.order.filter((b) => b.level === 1).slice().sort((a, b) => a.x - b.x);
-    const cortes = [];
-    for (const b of chao) {
-      const xc = b.x + b.l / 2;
-      if (!cortes.length || xc - cortes[cortes.length - 1] > 5) cortes.push(xc);
-    }
-    wrap.innerHTML = cortes.map((xc, idx) => {
-      const boxes = R.order.filter((b) => b.x <= xc + EPS && b.x + b.l >= xc - EPS).sort((a, b) => (b.x + b.l) - (a.x + a.l));
-      let s = `<svg class="fc-plan fc-pile-svg" viewBox="-2 -2 ${C.W + 4} ${C.H + 4}" role="img" aria-label="Corte ${idx + 1}, vista de frente"><rect class="fc-bed" x="0" y="0" width="${C.W}" height="${C.H}"/>`;
+    const marcos = new Set([0]);
+    R.order.forEach((b) => { marcos.add(b.x); marcos.add(b.x + b.l); });
+    const pontos = Array.from(marcos).filter((x) => x < C.L - EPS).sort((a, b) => a - b);
+    let assinaturaAnterior = null;
+    const posicoes = [];
+    pontos.forEach((x0, i) => {
+      const x1 = i + 1 < pontos.length ? pontos[i + 1] : C.L;
+      const xc = (x0 + x1) / 2;
+      const boxes = R.order.filter((b) => b.x <= xc + EPS && b.x + b.l >= xc - EPS).sort((a, b) => a.seq - b.seq);
+      const assinatura = boxes.map((b) => b.seq).join(",");
+      if (assinatura === assinaturaAnterior) return; // igual ao corte anterior, não repete
+      assinaturaAnterior = assinatura;
+      posicoes.push({ xc, boxes });
+    });
+    wrap.innerHTML = posicoes.map(({ xc, boxes: lista }, idx) => {
+      const boxes = lista.slice().sort((a, b) => (b.x + b.d.l) - (a.x + a.d.l));
+      let s = `<svg class="fc-plan fc-pile-svg" viewBox="-2 -2 ${C.W + 4} ${C.H + 4}" role="img" aria-label="Posição ${idx + 1}, vista de frente"><rect class="fc-bed" x="0" y="0" width="${C.W}" height="${C.H}"/>`;
       for (const b of boxes) {
         const x = C.W - (b.y + b.d.w), y = C.H - (b.z + b.d.h);
         s += `<rect class="fc-bx" x="${x}" y="${y}" width="${b.d.w}" height="${b.d.h}" fill="${color(b.it.ti)}"/>` + lbl(b, b.d.w, b.d.h, x, y);

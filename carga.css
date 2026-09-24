@@ -1,7 +1,9 @@
 /* ============================================================
    Formação de Carga (aba "tab-carga") — estilos isolados
    ============================================================ */
-#tab-carga .fc-grid { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 20px; align-items: start; }
+/* Nesta aba, usa a largura toda da tela (as outras abas mantêm o max-width padrão do <main>) */
+body:has(#tab-carga.active) main { max-width: none; }
+#tab-carga .fc-grid { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 20px; align-items: start; }
 @media (max-width: 960px) { #tab-carga .fc-grid { grid-template-columns: minmax(0, 1fr); } }
 #tab-carga .fc-col { display: flex; flex-direction: column; min-width: 0; }
 #tab-carga .card { min-width: 0; }

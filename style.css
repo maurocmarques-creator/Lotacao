@@ -355,6 +355,12 @@ table.editable-table th {
 table.editable-table td { padding: 6px; border-bottom: 1px solid var(--gray-200); }
 table.editable-table input, table.editable-table select { width: 100%; }
 table.editable-table td.mkp-calculado { font-weight: 700; color: var(--blue-900); white-space: nowrap; }
+.filtro-row th { padding: 4px 6px; background: #fff; }
+.filtro-input {
+  width: 100%; font-size: 13px; font-weight: 400; color: var(--gray-800);
+  padding: 5px 8px; border: 1px solid var(--gray-200); border-radius: 6px; box-sizing: border-box;
+}
+.filtro-input:focus { outline: none; border-color: var(--blue-500); }
 .btn-remove {
   background: #fdecea; color: #c0392b; border: none; border-radius: 6px;
   width: 28px; height: 28px; cursor: pointer; font-weight: 700;

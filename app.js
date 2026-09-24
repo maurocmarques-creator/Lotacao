@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 22:09";
+const BUILD_TIMESTAMP = "23/09/2026 22:16";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -1567,6 +1567,8 @@ function renderTabelaSpot() {
     });
   });
 
+  aplicarFiltroSpot();
+
   // Autocomplete de cidade nas colunas Origem/Destino, igual ao da Calculadora —
   // evita cadastrar um nome de cidade/UF que nunca vai bater com o trecho calculado.
   tbody.querySelectorAll("input[data-field='origem'], input[data-field='destino']").forEach((inputEl) => {
@@ -1585,6 +1587,27 @@ function renderTabelaSpot() {
     });
   });
 }
+
+/** Filtra as linhas já renderizadas da tabela SPOT pelos 3 campos de busca
+ * (Origem/Destino/Veículo, cada um funcionando independente, "E" entre eles) —
+ * não mexe nos dados, só esconde/mostra linhas na tela (útil com o cadastro
+ * grande, ~500 trechos). Ignora acento/maiúscula, igual ao resto do app. */
+function aplicarFiltroSpot() {
+  const fOrigem = normalizeStr($("filtroSpotOrigem")?.value || "");
+  const fDestino = normalizeStr($("filtroSpotDestino")?.value || "");
+  const fVeiculo = normalizeStr($("filtroSpotVeiculo")?.value || "");
+  const tbody = $("tabelaSpot").querySelector("tbody");
+  tbody.querySelectorAll("tr").forEach((tr) => {
+    const origem = normalizeStr(tr.querySelector("input[data-field='origem']")?.value || "");
+    const destino = normalizeStr(tr.querySelector("input[data-field='destino']")?.value || "");
+    const veiculo = normalizeStr(tr.querySelector("select[data-field='veiculo']")?.value || "");
+    const ok = origem.includes(fOrigem) && destino.includes(fDestino) && veiculo.includes(fVeiculo);
+    tr.style.display = ok ? "" : "none";
+  });
+}
+["filtroSpotOrigem", "filtroSpotDestino", "filtroSpotVeiculo"].forEach((id) => {
+  $(id).addEventListener("input", aplicarFiltroSpot);
+});
 
 $("btnAddSpot").addEventListener("click", () => {
   spotTable.push({ origem: "", destino: "", veiculo: veiculosTable[0] ? veiculosTable[0].tipo : "", valor: 0 });

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calculadora de Frete</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="carga.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -48,6 +49,8 @@
     </div>
 
     <button class="tab-btn" data-tab="historico">Histórico</button>
+
+    <button class="tab-btn" data-tab="carga">Formação de Carga</button>
 
     <div class="tabs-dropdown" id="configDropdown">
       <button class="tab-btn dropdown-toggle" type="button" id="btnConfigToggle">Configuração <span class="dropdown-arrow">&#9662;</span></button>
@@ -693,6 +696,128 @@
     </div>
   </section>
 
+  <!-- ===================== ABA FORMAÇÃO DE CARGA ===================== -->
+  <section id="tab-carga" class="tab-panel">
+    <div class="fc-grid">
+      <div class="fc-col">
+        <div class="card">
+          <h2>Baú (medidas internas)</h2>
+          <label>Modelo
+            <select id="fcPreset"></select>
+          </label>
+          <div class="fc-row">
+            <label>Comprimento (m)<input id="fcL" class="fc-num" inputmode="decimal"></label>
+            <label>Largura (m)<input id="fcW" class="fc-num" inputmode="decimal"></label>
+            <label>Altura (m)<input id="fcH" class="fc-num" inputmode="decimal"></label>
+          </div>
+          <label>Capacidade de peso (kg) — opcional<input id="fcCap" class="fc-num" inputmode="numeric" placeholder="ex.: 27000"></label>
+        </div>
+
+        <div class="card">
+          <div class="fc-head">
+            <h2>Carga</h2>
+            <div class="fc-row">
+              <button type="button" id="fcBtnPaste" class="btn-secondary">Colar lista</button>
+              <button type="button" id="fcBtnAdd" class="btn-secondary">+ Tipo de caixa</button>
+            </div>
+          </div>
+          <div id="fcPasteBox" hidden>
+            <label>Cole uma linha por tipo, ex.: 15 caixas com 146x82x96 cm
+              <textarea id="fcPasteText" placeholder="15 caixas com 146x82x96 cm&#10;29 caixas com 107x62x73 cm"></textarea>
+            </label>
+            <div class="fc-actions" style="margin-bottom:12px">
+              <button type="button" id="fcBtnImport" class="btn-secondary">Substituir lista</button>
+              <button type="button" id="fcBtnAppend" class="btn-secondary">Adicionar à lista</button>
+              <span id="fcPasteMsg" class="hint"></span>
+            </div>
+          </div>
+          <div class="fc-types-wrap">
+            <table class="fc-types">
+              <thead><tr><th></th><th>Qtd</th><th>C (cm)</th><th>L (cm)</th><th>A (cm)</th><th>kg/cx</th><th title="Permite colocar outras caixas em cima">Aceita<br>em cima</th><th></th></tr></thead>
+              <tbody id="fcTypesBody"></tbody>
+            </table>
+          </div>
+          <small class="hint" id="fcCargoSum"></small>
+        </div>
+
+        <div class="card">
+          <h2>Regras de arrumação</h2>
+          <div class="fc-checks">
+            <label><input type="checkbox" id="fcStack"><span>Permitir empilhar<small>Caixas podem ir sobre outras (respeitando “aceita em cima”).</small></span></label>
+            <label><input type="checkbox" id="fcTip"><span>Permitir deitar / tombar caixas<small>Desligado: a altura (A) fica sempre na vertical; só gira 90° no piso.</small></span></label>
+          </div>
+          <div class="fc-row">
+            <label>Apoio mínimo da base (%)<input id="fcSup" type="number" min="30" max="100" step="5"></label>
+            <label>Folga entre volumes (cm)<input id="fcGap" type="number" min="0" max="20" step="0.5"></label>
+          </div>
+          <div class="fc-actions">
+            <button type="button" id="fcBtnRun" class="btn-primary">Calcular carga</button>
+            <button type="button" id="fcBtnReset" class="btn-secondary">Restaurar exemplo</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="fc-col" id="fcResults">
+        <div id="fcVerdict" class="fc-verdict warn"><span class="fc-mark">…</span><div><h3>Formação de Carga</h3><p>Informe o baú e as caixas e clique em “Calcular carga”.</p></div></div>
+        <div class="fc-metrics" id="fcMetrics"></div>
+
+        <div class="card">
+          <div class="fc-head">
+            <h2>Vista 3D — passo a passo</h2>
+            <div class="fc-legend" id="fcLegend"></div>
+          </div>
+          <div class="fc-stage" id="fcStage"><span class="fc-tag">Arraste para girar · roda do mouse para zoom · cabine à esquerda (cinza)</span></div>
+          <div class="fc-steps">
+            <button type="button" id="fcSFirst" class="btn-secondary">Início</button>
+            <button type="button" id="fcSPrev" class="btn-secondary" aria-label="Passo anterior">&#9664;</button>
+            <input id="fcStep" type="range" min="0" max="0" value="0" aria-label="Passo do carregamento">
+            <button type="button" id="fcSNext" class="btn-secondary" aria-label="Próximo passo">&#9654;</button>
+            <button type="button" id="fcSPlay" class="btn-secondary">Reproduzir</button>
+            <button type="button" id="fcSAll" class="btn-secondary">Tudo</button>
+          </div>
+          <div class="fc-stepinfo" id="fcStepInfo"></div>
+        </div>
+
+        <div class="card">
+          <div class="fc-head">
+            <h2>Mapa visto de cima</h2>
+            <div class="fc-tabs" id="fcLvlTabs" role="group" aria-label="Nível"></div>
+          </div>
+          <div class="fc-mapbox"><div class="fc-mapinner">
+            <div class="fc-side">Lado passageiro (direito)</div>
+            <div class="fc-ends"><span>&#9664; Cabine</span><span>Portas &#9654;</span></div>
+            <div id="fcTopSvg"></div>
+            <div class="fc-side">Lado motorista (esquerdo) · régua em metros a partir da cabine</div>
+          </div></div>
+          <p class="hint">Os números são a ordem de carregamento. Em “Todos os níveis” aparece a caixa de cima de cada pilha; escolha um nível para ver o que está por baixo.</p>
+        </div>
+
+        <div class="card">
+          <h2>Vista lateral (lado do motorista)</h2>
+          <div class="fc-mapbox"><div class="fc-mapinner">
+            <div class="fc-ends"><span>&#9664; Cabine</span><span>Portas &#9654;</span></div>
+            <div id="fcSideSvg"></div>
+          </div></div>
+        </div>
+
+        <div class="card">
+          <div class="fc-head">
+            <h2>Sequência de carregamento</h2>
+            <span class="hint">Clique numa linha para ver o passo no 3D</span>
+          </div>
+          <div class="fc-seq-wrap">
+            <table class="fc-seq">
+              <thead><tr><th>#</th><th>Tipo</th><th>Posição (C×L×A)</th><th>Da cabine</th><th>Do lado esq.</th><th>Altura da base</th><th>Nível</th><th>Obs.</th></tr></thead>
+              <tbody id="fcSeqBody"></tbody>
+            </table>
+          </div>
+          <div id="fcLeftOut"></div>
+          <p class="hint">Cálculo heurístico (várias estratégias testadas, fica a melhor). Se disser que não cabe por poucos volumes, um arranjo manual ainda pode existir. Confira peso por eixo, amarração e fragilidade antes de carregar. Os dados desta aba ficam salvos só neste navegador.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ===================== ABA DRE PROJETADO ===================== -->
   <section id="tab-dre" class="tab-panel">
     <div class="card">
@@ -735,5 +860,8 @@
 </footer>
 
 <script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="carga.js"></script>
 </body>
 </html>

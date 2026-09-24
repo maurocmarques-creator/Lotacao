@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 23:14";
+const BUILD_TIMESTAMP = "24/09/2026 07:43";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -246,6 +246,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
    ============================================================ */
 const MENUS_SUSPENSOS = [
   { dropdownId: "cadastrosDropdown", toggleId: "btnCadastrosToggle", menuId: "cadastrosMenu" },
+  { dropdownId: "calculoDropdown", toggleId: "btnCalculoToggle", menuId: "calculoMenu" },
   { dropdownId: "configDropdown", toggleId: "btnConfigToggle", menuId: "configMenu" },
 ];
 

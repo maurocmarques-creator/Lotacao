@@ -39,7 +39,12 @@
       </div>
     </div>
 
-    <button class="tab-btn active" data-tab="calculadora">Calculadora</button>
+    <div class="tabs-dropdown" id="calculoDropdown">
+      <button class="tab-btn dropdown-toggle active" type="button" id="btnCalculoToggle">Cálculo do Transporte <span class="dropdown-arrow">&#9662;</span></button>
+      <div class="tabs-dropdown-menu" id="calculoMenu" hidden>
+        <button class="tab-btn dropdown-item active" data-tab="calculadora">Lotação</button>
+      </div>
+    </div>
 
     <button class="tab-btn" data-tab="historico">Histórico</button>
 

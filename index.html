@@ -368,6 +368,22 @@
         são criados automaticamente lá (com R$/km 0,00 — ajuste se for usar sem SPOT).
       </p>
 
+      <div class="spot-import-row">
+        <input type="file" id="brudamImportFile" accept=".xlsx" style="display:none">
+        <button type="button" id="btnAtualizarBrudam" class="btn-secondary">Atualizar via Brudam</button>
+        <span class="save-msg" id="msgBrudam"></span>
+      </div>
+      <p class="hint">
+        No Brudam (Comercial → tabela de venda), clique em <b>Excel → Exportação por trecho</b> —
+        isso baixa um arquivo .xlsx com todos os trechos. Clique aqui em "Atualizar via Brudam" e
+        selecione esse arquivo baixado: o app lê a tarifa mínima de cada trecho, compara com este
+        cadastro (mesma origem/destino/veículo) e atualiza os valores diferentes e adiciona os
+        trechos novos automaticamente, sem duplicar. Não requer login — a exportação do Brudam
+        precisa ser feita manualmente antes, por questão de segurança (o Brudam não pode ser
+        acessado direto por este site).
+      </p>
+      <p class="hint" id="msgBrudamUltimaAtualizacao"></p>
+
       <table class="editable-table" id="tabelaSpot">
         <thead>
           <tr><th>Cidade/UF Origem</th><th>Cidade/UF Destino</th><th>Tipo de Veículo</th><th>Valor (R$)</th><th></th></tr>

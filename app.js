@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "23/09/2026 15:38";
+const BUILD_TIMESTAMP = "23/09/2026 21:07";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -127,10 +127,11 @@ let vendedoresTable = [];
 let spotTable = [];
 let mkpTable = [];
 let historicoCotacoes = [];
+let spotBrudamUltimaAtualizacao = "";
 
 /** Busca todos os cadastros e o histórico no Supabase; roda uma vez, antes da tela renderizar. */
 async function carregarDadosIniciais() {
-  const [antt, veiculos, venda, icms, ajusteKm, ors, qualp, anttCfg, vendedores, spot, mkp, historico] = await Promise.all([
+  const [antt, veiculos, venda, icms, ajusteKm, ors, qualp, anttCfg, vendedores, spot, mkp, historico, brudamData] = await Promise.all([
     carregarConfig("antt", DEFAULT_ANTT),
     carregarConfig("veiculos", DEFAULT_VEICULOS),
     carregarConfig("venda", DEFAULT_VENDA),
@@ -143,6 +144,7 @@ async function carregarDadosIniciais() {
     carregarConfig("spot", []),
     carregarConfig("mkp", []),
     carregarHistorico(),
+    carregarConfig("spotBrudamUltimaAtualizacao", ""),
   ]);
 
   anttTable = antt;
@@ -164,6 +166,7 @@ async function carregarDadosIniciais() {
   spotTable = spot;
   mkpTable = mkp;
   historicoCotacoes = historico;
+  spotBrudamUltimaAtualizacao = brudamData;
 }
 
 /* ============================================================
@@ -1776,6 +1779,211 @@ $("btnImportarSpot").addEventListener("click", async () => {
 });
 
 /* ============================================================
+   Atualizar Custo de Operação SPOT a partir do Brudam
+   (Comercial → Tabela 24 → Excel → Exportação por trecho)
+   ============================================================ */
+
+const BRUDAM_SERVICO_PARA_TIPO = {
+  CARRETA: "Carreta",
+  VAN: "Van",
+  "3/4": "3/4",
+  TOCO: "Toco",
+  BITRUCK: "Bitruck",
+  FIORINO: "Fiorino",
+  TRUCK: "Truck",
+  CNTR: "Cntr",
+};
+
+/** O Brudam prefixa todo serviço com "PERSONALIZADO_L " (ex.: "PERSONALIZADO_L CARRETA",
+ * "PERSONALIZADO_L VAN") — remove o prefixo antes de mapear pro tipo de veículo do cadastro. */
+function normalizarServicoBrudam(raw) {
+  return String(raw || "")
+    .trim()
+    .toUpperCase()
+    .replace(/^PERSONALIZADO_L\s+/, "");
+}
+
+const CONECTIVOS_CIDADE = new Set(["de", "da", "do", "das", "dos", "e"]);
+
+/** Formata "CIDADE - UF" (como o Brudam manda, em caixa alta) para "Cidade - UF", igual ao
+ * padrão do cadastro — usado só ao criar linha nova; linha já cadastrada mantém a grafia atual. */
+function tituloLocalBrudam(raw) {
+  const partes = String(raw || "").trim().split(" - ");
+  if (partes.length !== 2) return raw;
+  const cidade = partes[0]
+    .toLowerCase()
+    .split(" ")
+    .map((w, i) => (i > 0 && CONECTIVOS_CIDADE.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
+  return `${cidade} - ${partes[1].trim().toUpperCase()}`;
+}
+
+/** Corrige o erro de digitação do próprio Brudam onde a UF vem duplicada no fim
+ * (ex.: "BRASILIA - DF - DF" → "BRASILIA - DF"). */
+function limparLocalBrudam(raw) {
+  const partes = String(raw || "").trim().split(" - ");
+  if (partes.length === 3 && partes[1].trim().toUpperCase() === partes[2].trim().toUpperCase()) {
+    return `${partes[0]} - ${partes[1]}`.trim();
+  }
+  return String(raw || "").trim();
+}
+
+/** true só para "Cidade - UF" reconhecível; false para os códigos de UF isolada (ex.: "SP"
+ * sozinho) que o Brudam às vezes usa pra regra genérica por estado, sem cidade real — não dá
+ * pra geocodificar isso, então essas linhas são ignoradas na importação. */
+function localBrudamValido(raw) {
+  return /^.+ - [A-Za-zÀ-ÿ]{2}$/.test(String(raw || "").trim());
+}
+
+/** Lê o Excel de "Exportação por trecho" do Brudam e sincroniza com o Custo de Operação SPOT.
+ * Cada trecho ocupa 3 linhas consecutivas (Mínimo / Franquia / Excedente); usa-se só a linha
+ * "Mínimo": coluna 2 = Origem, coluna 6 = Destino, coluna 8 = Serviço (mapeado pro tipo de
+ * veículo do cadastro), e o valor é a única célula preenchida entre as colunas 10-36 (a tarifa
+ * mínima do item "2. Frete Entrega" daquele serviço).
+ *
+ * O mesmo trecho/veículo às vezes aparece MAIS DE UMA VEZ na planilha (faixas de peso
+ * duplicadas/substituídas do lado do Brudam, sem relação com o layout usado aqui) — nesse caso
+ * usa-se sempre a PRIMEIRA ocorrência (a que aparece mais acima na planilha), que é a mesma
+ * convenção já usada desde a primeira importação manual e que bate com os valores já validados
+ * no cadastro atual.
+ *
+ * Mesma regra do cadastro: trecho já cadastrado com o MESMO valor não conta como mudança;
+ * valor diferente atualiza; trecho novo é adicionado. */
+async function importarBrudamXlsx(file) {
+  const buffer = await file.arrayBuffer();
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const ws = workbook.worksheets[0];
+  if (!ws) return { erro: "Planilha vazia ou em formato não reconhecido." };
+
+  const ignorados = [];
+  const candidatos = new Map(); // key normalizado -> { origemRaw, destinoRaw, tipo, valor }
+
+  for (let r = 3; r + 2 <= ws.rowCount; r += 3) {
+    const rotulo = String(valorCelulaImportada(ws.getRow(r).getCell(9).value) || "").trim().toLowerCase();
+    if (!rotulo.startsWith("min")) continue; // só a linha "Mínimo"; outro layout é ignorado
+
+    const origemRaw = limparLocalBrudam(valorCelulaImportada(ws.getRow(r).getCell(2).value));
+    const destinoRaw = limparLocalBrudam(valorCelulaImportada(ws.getRow(r).getCell(6).value));
+    const servico = normalizarServicoBrudam(valorCelulaImportada(ws.getRow(r).getCell(8).value));
+
+    if (!localBrudamValido(origemRaw) || !localBrudamValido(destinoRaw)) {
+      ignorados.push(`Linha ${r}: "${origemRaw}" → "${destinoRaw}" (sem cidade real, provável regra genérica por UF)`);
+      continue;
+    }
+
+    const tipo = BRUDAM_SERVICO_PARA_TIPO[servico];
+    if (!tipo) {
+      ignorados.push(`Linha ${r}: serviço "${servico}" não mapeado para tipo de veículo`);
+      continue;
+    }
+
+    let valor = null;
+    for (let c = 10; c <= 36; c++) {
+      const v = Number(valorCelulaImportada(ws.getRow(r).getCell(c).value));
+      if (v > 0) {
+        valor = v;
+        break;
+      }
+    }
+    if (!valor) {
+      ignorados.push(`Linha ${r}: "${origemRaw}" → "${destinoRaw}" / ${tipo} (sem tarifa mínima preenchida)`);
+      continue;
+    }
+
+    const key = `${normalizarLocalSpot(origemRaw)}|${normalizarLocalSpot(destinoRaw)}|${tipo}`;
+    if (candidatos.has(key)) continue; // duplicata na planilha: mantém a primeira ocorrência
+    candidatos.set(key, { origemRaw, destinoRaw, tipo, valor });
+  }
+
+  let identicos = 0;
+  let atualizados = 0;
+  let novos = 0;
+  const novosVeiculos = [];
+
+  for (const { origemRaw, destinoRaw, tipo, valor } of candidatos.values()) {
+    let veiculoExistente = veiculosTable.find((v) => v.tipo.toLowerCase() === tipo.toLowerCase());
+    if (!veiculoExistente) {
+      veiculoExistente = { tipo, valorKm: 0 };
+      veiculosTable.push(veiculoExistente);
+      if (!novosVeiculos.includes(tipo)) novosVeiculos.push(tipo);
+    }
+
+    const existente = spotTable.find(
+      (row) =>
+        normalizarLocalSpot(row.origem) === normalizarLocalSpot(origemRaw) &&
+        normalizarLocalSpot(row.destino) === normalizarLocalSpot(destinoRaw) &&
+        row.veiculo === veiculoExistente.tipo
+    );
+    if (existente) {
+      if (Number(existente.valor) === valor) {
+        identicos++;
+      } else {
+        existente.valor = valor;
+        atualizados++;
+      }
+    } else {
+      spotTable.push({
+        origem: tituloLocalBrudam(origemRaw),
+        destino: tituloLocalBrudam(destinoRaw),
+        veiculo: veiculoExistente.tipo,
+        valor,
+      });
+      novos++;
+    }
+  }
+
+  spotBrudamUltimaAtualizacao = new Date().toISOString();
+  await Promise.all([
+    salvarConfig("spot", spotTable),
+    salvarConfig("veiculos", veiculosTable),
+    salvarConfig("spotBrudamUltimaAtualizacao", spotBrudamUltimaAtualizacao),
+  ]);
+  renderTabelaSpot();
+  renderTabelaVeiculos();
+  preencherSelects();
+  atualizarLabelBrudam();
+
+  return { identicos, atualizados, novos, ignorados, novosVeiculos };
+}
+
+function atualizarLabelBrudam() {
+  const el = $("msgBrudamUltimaAtualizacao");
+  if (!el) return;
+  if (!spotBrudamUltimaAtualizacao) {
+    el.textContent = "Nunca sincronizado com o Brudam.";
+    return;
+  }
+  const d = new Date(spotBrudamUltimaAtualizacao);
+  el.textContent = `Última sincronização com o Brudam: ${d.toLocaleDateString("pt-BR")} ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+$("btnAtualizarBrudam").addEventListener("click", () => $("brudamImportFile").click());
+
+$("brudamImportFile").addEventListener("change", async () => {
+  const input = $("brudamImportFile");
+  const msg = $("msgBrudam");
+  const file = input.files[0];
+  if (!file) return;
+  msg.textContent = "Lendo planilha do Brudam e sincronizando...";
+  try {
+    const r = await importarBrudamXlsx(file);
+    if (r.erro) {
+      msg.textContent = r.erro;
+      return;
+    }
+    const partes = [`${r.identicos} já estavam iguais`, `${r.atualizados} atualizado(s)`, `${r.novos} novo(s)`];
+    if (r.ignorados.length) partes.push(`${r.ignorados.length} linha(s) ignorada(s) (veja o console)`);
+    if (r.novosVeiculos.length) partes.push(`novo(s) tipo(s) de veículo criado(s) no Custo por KM: ${r.novosVeiculos.join(", ")}`);
+    msg.textContent = partes.join(" · ");
+    if (r.ignorados.length) console.warn("Linhas ignoradas na sincronização com o Brudam:\n" + r.ignorados.join("\n"));
+    input.value = "";
+  } catch (e) {
+    msg.textContent = "Erro ao sincronizar: " + e.message;
+  }
+});
+
+/* ============================================================
    Aba Parâmetros de Venda
    ============================================================ */
 function renderVenda() {
@@ -3035,6 +3243,7 @@ async function iniciarApp() {
   renderTabelaAntt();
   renderTabelaVeiculos();
   renderTabelaSpot();
+  atualizarLabelBrudam();
   renderVenda();
   renderTabelaMkp();
   preencherSelectMkp();

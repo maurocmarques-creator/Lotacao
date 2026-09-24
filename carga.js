@@ -26,6 +26,7 @@
     { k: "c40h", n: "Contêiner 40' HC — 12,03 × 2,35 × 2,69", L: "12,03", W: "2,35", H: "2,69" },
   ];
   const DEFAULT = {
+    cotacao: "",
     truck: { L: "15,80", W: "2,60", H: "2,80", cap: "" },
     opts: { stack: true, tip: false, sup: 80, gap: 0 },
     types: [
@@ -52,10 +53,19 @@
     presetSel.value = m ? m.k : "custom";
   }
   function fillTruck() {
+    $("fcCotacao").value = S.cotacao || "";
     $("fcL").value = S.truck.L; $("fcW").value = S.truck.W; $("fcH").value = S.truck.H; $("fcCap").value = S.truck.cap || "";
     $("fcStack").checked = !!S.opts.stack; $("fcTip").checked = !!S.opts.tip; $("fcSup").value = S.opts.sup; $("fcGap").value = S.opts.gap;
     syncPreset();
+    atualizarCotacaoInfo();
   }
+  function atualizarCotacaoInfo() {
+    const el = $("fcCotacaoInfo");
+    const v = (S.cotacao || "").toString().trim();
+    el.hidden = !v;
+    el.textContent = v ? `Cotação Nº ${v}` : "";
+  }
+  $("fcCotacao").addEventListener("input", (e) => { S.cotacao = e.target.value; atualizarCotacaoInfo(); save(); });
   presetSel.addEventListener("change", () => {
     const p = PRESETS.find((x) => x.k === presetSel.value);
     if (p && p.L) { S.truck.L = p.L; S.truck.W = p.W; S.truck.H = p.H; fillTruck(); save(); }
@@ -311,6 +321,7 @@
     $("fcLvlTabs").innerHTML = tabs.join("");
     curLevel = 0;
     renderSeq();
+    drawPiles();
     build3D();
     setStep(P.length);
     $("fcLeftOut").innerHTML = un.length
@@ -354,6 +365,53 @@
     }
     $("fcSideSvg").innerHTML = s + "</svg>";
   }
+  /** Agrupa as caixas em "pilhas" (volumes empilhados numa mesma posição): cada caixa do
+   * piso começa sua própria pilha; toda caixa em cima entra na pilha do apoio com quem
+   * tem MAIOR área de sobreposição (o apoio "principal") — não junta pilhas vizinhas só
+   * porque uma caixa de cima invade um pouco o espaço da pilha ao lado. */
+  function buildPiles(P) {
+    const ownerOf = new Map(), groups = new Map();
+    P.slice().sort((a, b) => a.z - b.z).forEach((b) => {
+      let rep;
+      if (!b.sup.length) {
+        rep = b;
+      } else {
+        let melhor = b.sup[0], melhorArea = -1;
+        for (const s of b.sup) {
+          const ox = Math.min(b.x + b.l, s.x + s.l) - Math.max(b.x, s.x);
+          const oy = Math.min(b.y + b.w, s.y + s.w) - Math.max(b.y, s.y);
+          const area = Math.max(0, ox) * Math.max(0, oy);
+          if (area > melhorArea) { melhorArea = area; melhor = s; }
+        }
+        rep = ownerOf.get(melhor);
+      }
+      ownerOf.set(b, rep);
+      if (!groups.has(rep)) groups.set(rep, []);
+      groups.get(rep).push(b);
+    });
+    return Array.from(groups.values());
+  }
+  /** Desenha uma miniatura por pilha, vista de frente (olhando da cabine para a traseira):
+   * eixo horizontal = largura (mesma orientação esquerda/direita do Mapa visto de cima),
+   * eixo vertical = altura. Caixas mais próximas da cabine são desenhadas por cima. */
+  function drawPiles() {
+    const wrap = $("fcPiles");
+    if (!wrap) return;
+    if (!R || !R.order.length) { wrap.innerHTML = ""; return; }
+    const piles = buildPiles(R.order).map((boxes) => ({ boxes, x0: Math.min(...boxes.map((b) => b.x)) })).sort((a, b) => a.x0 - b.x0);
+    wrap.innerHTML = piles.map((pile, idx) => {
+      const boxes = pile.boxes.slice().sort((a, b) => (b.x + b.d.l) - (a.x + a.d.l));
+      let s = `<svg class="fc-plan fc-pile-svg" viewBox="-2 -2 ${C.W + 4} ${C.H + 4}" role="img" aria-label="Pilha ${idx + 1}, vista de frente"><rect class="fc-bed" x="0" y="0" width="${C.W}" height="${C.H}"/>`;
+      for (const b of boxes) {
+        const x = C.W - (b.y + b.d.w), y = C.H - (b.z + b.d.h);
+        s += `<rect class="fc-bx" x="${x}" y="${y}" width="${b.d.w}" height="${b.d.h}" fill="${color(b.it.ti)}"/>` + lbl(b, b.d.w, b.d.h, x, y);
+      }
+      s += "</svg>";
+      const seqs = pile.boxes.map((b) => b.seq).sort((a, b) => a - b);
+      return `<div class="fc-pile-item"><h4>Pilha ${idx + 1} <span class="hint">(#${seqs.join(", #")} · ${fmt(pile.x0 / 100)} m da cabine)</span></h4>${s}</div>`;
+    }).join("");
+  }
+
   function renderSeq() {
     $("fcSeqBody").innerHTML = R.order.map((b) => {
       const it = b.it, d = b.d; const obs = [];

@@ -94,3 +94,10 @@
 #tab-carga .fc-pill { font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--gray-100); border: 1px solid var(--gray-200); color: var(--gray-500); }
 #tab-carga .fc-out { margin: 4px 0 0; padding-left: 18px; color: #c0392b; font-size: 13px; }
 #tab-carga .fc-busy { opacity: .55; pointer-events: none; }
+
+/* vista frontal de cada pilha */
+#tab-carga .fc-piles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+#tab-carga .fc-pile-item { background: #fff; border: 1px solid var(--gray-200); border-radius: 8px; padding: 8px; }
+#tab-carga .fc-pile-item h4 { margin: 0 0 6px; font-size: 12.5px; color: var(--blue-900); }
+#tab-carga .fc-pile-item h4 .hint { font-size: 11px; }
+#tab-carga svg.fc-pile-svg { background: #f7f9fb; }

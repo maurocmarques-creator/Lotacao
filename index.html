@@ -702,6 +702,9 @@
       <div class="fc-col">
         <div class="card">
           <h2>Baú (medidas internas)</h2>
+          <label>Nº Cotação <span class="campo-lado-tag">pra identificar este plano com a Operação</span>
+            <input id="fcCotacao" class="fc-num" inputmode="numeric" placeholder="ex.: 13">
+          </label>
           <label>Modelo
             <select id="fcPreset"></select>
           </label>
@@ -758,6 +761,7 @@
       </div>
 
       <div class="fc-col" id="fcResults">
+        <p class="hint" id="fcCotacaoInfo" hidden></p>
         <div id="fcVerdict" class="fc-verdict warn"><span class="fc-mark">…</span><div><h3>Formação de Carga</h3><p>Informe o baú e as caixas e clique em “Calcular carga”.</p></div></div>
         <div class="fc-metrics" id="fcMetrics"></div>
 
@@ -798,6 +802,12 @@
             <div class="fc-ends"><span>&#9664; Cabine</span><span>Portas &#9654;</span></div>
             <div id="fcSideSvg"></div>
           </div></div>
+        </div>
+
+        <div class="card">
+          <h2>Vista frontal de cada pilha</h2>
+          <p class="hint">Cada pilha (volumes empilhados numa mesma posição) vista de frente — olhando de onde fica a cabine para a traseira, na ordem em que aparecem do início ao fim do baú. Mesma orientação esquerda/direita do Mapa visto de cima.</p>
+          <div id="fcPiles" class="fc-piles-grid"></div>
         </div>
 
         <div class="card">

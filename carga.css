@@ -95,6 +95,17 @@
 #tab-carga .fc-out { margin: 4px 0 0; padding-left: 18px; color: #c0392b; font-size: 13px; }
 #tab-carga .fc-busy { opacity: .55; pointer-events: none; }
 
+/* planos salvos */
+#tab-carga .fc-saved-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 220px; overflow-y: auto; }
+#tab-carga .fc-saved-list li {
+  padding: 8px 10px; border: 1px solid var(--gray-200); border-radius: 6px; margin-bottom: 6px;
+  cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; align-items: center;
+}
+#tab-carga .fc-saved-list li:hover { background: var(--blue-100); }
+#tab-carga .fc-saved-list li b { color: var(--blue-900); }
+#tab-carga .fc-saved-list li span { color: var(--gray-500); font-size: 11.5px; white-space: nowrap; }
+#tab-carga .fc-saved-list .fc-saved-vazio { color: var(--gray-500); font-style: italic; cursor: default; border: none; padding: 6px 2px; }
+
 /* vista frontal de cada pilha */
 #tab-carga .fc-piles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
 #tab-carga .fc-pile-item { background: #fff; border: 1px solid var(--gray-200); border-radius: 8px; padding: 8px; }

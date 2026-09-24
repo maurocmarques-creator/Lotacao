@@ -701,6 +701,19 @@
     <div class="fc-grid">
       <div class="fc-col">
         <div class="card">
+          <h2>Planos Salvos</h2>
+          <p class="hint">Salva este plano (compartilhado entre todos que acessam) pra buscar depois pelo Nº Cotação.</p>
+          <label>Buscar por Nº Cotação
+            <input id="fcBusca" class="fc-num" inputmode="numeric" placeholder="Digite pra buscar...">
+          </label>
+          <ul id="fcListaSalvos" class="fc-saved-list"></ul>
+          <div class="fc-actions">
+            <button type="button" id="fcBtnSalvar" class="btn-primary">Salvar este plano</button>
+            <span class="save-msg" id="fcMsgSalvar"></span>
+          </div>
+        </div>
+
+        <div class="card">
           <h2>Baú (medidas internas)</h2>
           <label>Nº Cotação <span class="campo-lado-tag">pra identificar este plano com a Operação</span>
             <input id="fcCotacao" class="fc-num" inputmode="numeric" placeholder="ex.: 13">

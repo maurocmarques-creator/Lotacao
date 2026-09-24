@@ -344,8 +344,9 @@
     return s;
   }
   function lbl(b, wd, ht, x, y) {
-    const fs = Math.min(26, wd * 0.32, ht * 0.45);
-    return fs >= 8 ? `<text class="fc-lb" x="${x + wd / 2}" y="${y + ht / 2}" font-size="${fs.toFixed(1)}">${b.seq}</text>` : "";
+    const txt = `${b.seq}/${letter(b.it.ti)}`;
+    const fs = Math.min(22, wd * 0.16 * (2 / txt.length), ht * 0.4);
+    return fs >= 7 ? `<text class="fc-lb" x="${x + wd / 2}" y="${y + ht / 2}" font-size="${fs.toFixed(1)}">${txt}</text>` : "";
   }
   function drawTop() {
     const P = R.order.filter((b) => !curLevel || b.level === curLevel).slice().sort((a, b) => a.z - b.z || a.seq - b.seq);
@@ -510,7 +511,65 @@
     playT = setInterval(() => { const n = +stepEl.value + 1; setStep(n); if (n >= R.order.length) stopPlay(); }, 320);
   });
 
-  fillTruck(); renderTypes(); init3D();
+  /* ---------- planos salvos (compartilhado via Supabase, igual ao resto do app) ---------- */
+  const CARGAS_KEY = "cargas";
+  let cargasSalvas = [];
+  const normCotacao = (v) => String(v ?? "").trim();
+
+  function renderListaSalvos(filtro) {
+    const ul = $("fcListaSalvos");
+    const f = normCotacao(filtro).toLowerCase();
+    const itens = f ? cargasSalvas.filter((c) => normCotacao(c.cotacao).toLowerCase().includes(f)) : cargasSalvas;
+    if (!itens.length) {
+      ul.innerHTML = `<li class="fc-saved-vazio">${cargasSalvas.length ? "Nenhum plano encontrado." : "Nenhum plano salvo ainda."}</li>`;
+      return;
+    }
+    const ordenados = itens.slice().sort((a, b) => (b.atualizadoEm || "").localeCompare(a.atualizadoEm || ""));
+    ul.innerHTML = ordenados.map((c) => {
+      const dt = c.atualizadoEm ? new Date(c.atualizadoEm) : null;
+      const dtTxt = dt ? dt.toLocaleDateString("pt-BR") + " " + dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
+      return `<li data-id="${esc(c.id)}"><b>Cotação Nº ${esc(c.cotacao)}</b><span>${dtTxt}</span></li>`;
+    }).join("");
+  }
+  async function carregarListaSalvos() {
+    cargasSalvas = await carregarConfig(CARGAS_KEY, []);
+    renderListaSalvos($("fcBusca").value);
+  }
+  $("fcBusca").addEventListener("input", (e) => renderListaSalvos(e.target.value));
+  $("fcListaSalvos").addEventListener("click", (e) => {
+    const li = e.target.closest("li[data-id]");
+    if (!li) return;
+    const registro = cargasSalvas.find((c) => c.id === li.dataset.id);
+    if (!registro) return;
+    S = { cotacao: registro.cotacao, truck: registro.truck, opts: registro.opts, types: JSON.parse(JSON.stringify(registro.types)) };
+    save();
+    fillTruck(); renderTypes(); run();
+    $("fcMsgSalvar").textContent = `Plano da cotação ${registro.cotacao} carregado.`;
+    setTimeout(() => ($("fcMsgSalvar").textContent = ""), 3000);
+  });
+  $("fcBtnSalvar").addEventListener("click", async () => {
+    const cot = normCotacao(S.cotacao);
+    if (!cot) { $("fcMsgSalvar").textContent = "Preencha o Nº Cotação antes de salvar."; return; }
+    $("fcMsgSalvar").textContent = "Salvando...";
+    const lista = await carregarConfig(CARGAS_KEY, []);
+    const agora = new Date().toISOString();
+    const existente = lista.find((c) => normCotacao(c.cotacao) === cot);
+    const registro = {
+      id: existente ? existente.id : Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      cotacao: cot,
+      criadoEm: existente ? existente.criadoEm : agora,
+      atualizadoEm: agora,
+      truck: S.truck, opts: S.opts, types: S.types,
+    };
+    if (existente) Object.assign(existente, registro); else lista.push(registro);
+    await salvarConfig(CARGAS_KEY, lista);
+    cargasSalvas = lista;
+    renderListaSalvos($("fcBusca").value);
+    $("fcMsgSalvar").textContent = existente ? "Plano atualizado." : "Plano salvo.";
+    setTimeout(() => ($("fcMsgSalvar").textContent = ""), 3000);
+  });
+
+  fillTruck(); renderTypes(); init3D(); carregarListaSalvos();
 
   // Só calcula na primeira vez que a aba for aberta (não pesa no carregamento do app).
   let calculado = false;

@@ -43,6 +43,7 @@
       <button class="tab-btn dropdown-toggle active" type="button" id="btnCalculoToggle">Cálculo do Transporte <span class="dropdown-arrow">&#9662;</span></button>
       <div class="tabs-dropdown-menu" id="calculoMenu" hidden>
         <button class="tab-btn dropdown-item active" data-tab="calculadora">Lotação</button>
+        <button class="tab-btn dropdown-item" data-tab="dreManual">DRE Manual</button>
       </div>
     </div>
 
@@ -262,6 +263,71 @@
         ordem Origem &rarr; mais perto &rarr; ... &rarr; mais distante (mesma soma usada no KM).
       </p>
       <div id="mapaRota"></div>
+    </div>
+  </section>
+
+  <!-- ===================== ABA DRE MANUAL ===================== -->
+  <section id="tab-dreManual" class="tab-panel">
+    <div class="card">
+      <h2>DRE Manual</h2>
+      <p class="hint">
+        Digite os valores manualmente (sem calcular ANTT/KM/SPOT) — o Custo Contratação
+        informado aqui entra direto no DRE abaixo, no lugar do Custo Efetivo automático. O
+        resto da conta (formação de preço via MKP, ICMS, DRE completo) é automático, igual ao
+        resto do app. Isso não usa nem altera nenhuma cotação salva no Histórico.
+      </p>
+
+      <div class="grid-2">
+        <label>Cidade/UF Origem
+          <div class="autocomplete-wrap">
+            <input type="text" id="dreManualOrigem" autocomplete="off" placeholder="Digite para buscar a cidade">
+            <ul class="autocomplete-list" id="listDreManualOrigem" hidden></ul>
+          </div>
+        </label>
+        <label>Cidade/UF Destino
+          <div class="autocomplete-wrap">
+            <input type="text" id="dreManualDestino" autocomplete="off" placeholder="Digite para buscar a cidade">
+            <ul class="autocomplete-list" id="listDreManualDestino" hidden></ul>
+          </div>
+        </label>
+      </div>
+
+      <div class="grid-2">
+        <label>Tipo de Veículo
+          <select id="tipoVeiculoManual"></select>
+        </label>
+        <label>MKP aplicado
+          <select id="mkpSelecionadoManual"></select>
+        </label>
+      </div>
+
+      <div class="grid-3">
+        <label>Custo Contratação (R$)
+          <input type="number" id="dreManualCustoContratacao" placeholder="0,00" min="0" step="0.01" value="0">
+        </label>
+        <label>Valor Pedágio (R$)
+          <input type="number" id="dreManualPedagio" placeholder="0,00" min="0" step="0.01" value="0">
+        </label>
+        <label>Custo Extra (R$)
+          <input type="number" id="dreManualCustoExtra" placeholder="0,00" min="0" step="0.01" value="0">
+        </label>
+      </div>
+
+      <label>Valor da Mercadoria (R$)
+        <input type="number" id="dreManualValorMercadoria" placeholder="0,00" min="0" step="0.01" value="0">
+      </label>
+
+      <small class="hint" id="dreManualIcmsInfo"></small>
+    </div>
+
+    <div class="card">
+      <h2>Resultado &mdash; DRE Manual</h2>
+      <p class="sem-spot" id="dreManualVazio">Preencha Origem, Destino e o Custo Contratação para calcular.</p>
+      <table class="composicao-table dre-table" id="dreManualTabela"></table>
+      <div class="result-box dre-manual-pct" id="dreManualPctBox" hidden>
+        <span class="result-label">% do Frete Total sobre o Valor da Mercadoria</span>
+        <span class="result-value" id="dreManualPct">0,0%</span>
+      </div>
     </div>
   </section>
 

@@ -315,6 +315,12 @@ table.composicao-table tr.total td {
 
 /* DRE Projetado */
 .dre-single { max-width: 440px; }
+
+/* DRE Manual */
+p.sem-spot { color: var(--gray-500); font-size: 13px; padding: 10px 0; font-style: italic; }
+.result-box.dre-manual-pct { background: var(--blue-100); margin-top: 14px; max-width: 440px; }
+.result-box.dre-manual-pct .result-value { color: var(--blue-900); }
+#dreManualPctBox[hidden] { display: none; }
 .dre-table tr.dre-subitem td:first-child { padding-left: 18px; color: var(--gray-500); font-weight: 500; }
 .dre-table tr.dre-negativo td:last-child { color: #c0392b; }
 .dre-table tr.dre-subtotal td {

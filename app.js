@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "24/09/2026 07:43";
+const BUILD_TIMESTAMP = "24/09/2026 09:02";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -2048,6 +2048,7 @@ function atualizarPreviewVenda() {
   $("somaPct").textContent = fmtNum(soma, 1) + "%";
   $("mkpValor").textContent = mkp ? fmtNum(mkp, 4) : "indefinido";
   preencherSelectMkp();
+  preencherSelectMkpManual();
   atualizarComposicao();
 }
 
@@ -2123,6 +2124,7 @@ $("btnSalvarMkp").addEventListener("click", async () => {
   await salvarConfig("mkp", mkpTable);
   renderTabelaMkp();
   preencherSelectMkp();
+  preencherSelectMkpManual();
   $("msgMkp").textContent = "Cadastro salvo.";
   setTimeout(() => ($("msgMkp").textContent = ""), 2500);
 });
@@ -3270,6 +3272,126 @@ configurarAutocompleteCidade("cidadeDestino", "listCidadeDestino");
 carregarMunicipios(); // pré-carrega a lista de cidades em segundo plano
 
 /* ============================================================
+   Aba DRE Manual — independente da Calculadora e do Histórico:
+   não lê nem grava nenhuma cotação, só usa o que for digitado aqui.
+   Reaproveita as mesmas funções de cálculo (MKP, ICMS, DRE) da
+   Calculadora, sem mexer em nenhum estado/elemento dela.
+   ============================================================ */
+function preencherTipoVeiculoManual() {
+  const sel = $("tipoVeiculoManual");
+  const atual = sel.value;
+  sel.innerHTML = optionsVeiculoSpot();
+  if (atual) sel.value = atual;
+}
+
+/** Mesma ideia do preencherSelectMkp(), mas pro seletor independente da aba DRE Manual. */
+function preencherSelectMkpManual() {
+  const sel = $("mkpSelecionadoManual");
+  const atual = sel.value;
+  const opcoes = mkpTable.map((m, idx) => {
+    const { mkp } = mkpDePercentuais(m);
+    return `<option value="${idx}">${m.nome || "MKP " + (idx + 1)} — ${mkp ? fmtNum(mkp, 4) : "indefinido"}</option>`;
+  });
+  sel.innerHTML = [`<option value="">${nomeMkpPadrao()}</option>`, ...opcoes].join("");
+  if (atual && atual < mkpTable.length) sel.value = atual;
+}
+
+/** Mesma ideia do mkpAtivo(), mas lendo o seletor independente da aba DRE Manual. */
+function mkpAtivoManual() {
+  const idx = $("mkpSelecionadoManual").value;
+  if (idx !== "") {
+    const escolhido = mkpTable[parseInt(idx, 10)];
+    if (escolhido) return { ...escolhido, ...mkpDePercentuais(escolhido), nome: escolhido.nome, ehPadrao: false };
+  }
+  return { ...vendaParams, ...calcularMkp(), nome: nomeMkpPadrao(), ehPadrao: true };
+}
+
+let dreManualUfOrigem = "";
+let dreManualUfDestino = "";
+
+configurarAutocompleteCidadeElementos($("dreManualOrigem"), $("listDreManualOrigem"), (m) => {
+  dreManualUfOrigem = m.uf;
+  calcularDreManual();
+});
+configurarAutocompleteCidadeElementos($("dreManualDestino"), $("listDreManualDestino"), (m) => {
+  dreManualUfDestino = m.uf;
+  calcularDreManual();
+});
+
+/** Calcula e mostra o DRE Manual a partir só do que foi digitado nesta aba — mesma fórmula
+ * (custo → preço via MKP → ICMS "por dentro" → DRE completo) usada na Calculadora, só que
+ * partindo de um Custo Contratação digitado à mão em vez do Custo Efetivo (ANTT/KM/SPOT). */
+function calcularDreManual() {
+  const custoContratacao = parseFloat($("dreManualCustoContratacao").value) || 0;
+  const pedagio = parseFloat($("dreManualPedagio").value) || 0;
+  const custoExtra = parseFloat($("dreManualCustoExtra").value) || 0;
+  const valorMercadoria = parseFloat($("dreManualValorMercadoria").value) || 0;
+
+  if (!dreManualUfOrigem || !dreManualUfDestino || !custoContratacao) {
+    $("dreManualTabela").innerHTML = "";
+    $("dreManualVazio").hidden = false;
+    $("dreManualPctBox").hidden = true;
+    $("dreManualIcmsInfo").textContent = "";
+    return;
+  }
+
+  const ativo = mkpAtivoManual();
+  const pctAdval = Number(ativo.pctAdvalorem) || 0;
+  const advalorem = valorMercadoria * (pctAdval / 100);
+  const { aliquota, fonte } = obterAliquotaIcms(dreManualUfOrigem, dreManualUfDestino);
+
+  const rotuloMkp = ativo.mkp ? (ativo.ehPadrao ? fmtNum(ativo.mkp, 4) : `${fmtNum(ativo.mkp, 4)} (${ativo.nome})`) : "indefinido (percentuais somam 100% ou mais)";
+  const partesInfo = [`MKP: ${rotuloMkp}`];
+  partesInfo.push(aliquota !== null ? `ICMS ${dreManualUfOrigem} → ${dreManualUfDestino}: ${fmtNum(aliquota, 2)}% (${fonte})` : `ICMS: ${fonte}`);
+  $("dreManualIcmsInfo").textContent = partesInfo.join(" · ");
+
+  // custoBase soma pedágio + custo extra ao custo de contratação puro — mesma composição que
+  // o Custo Efetivo automático já tem embutida (calcular() faz igual pros custos ANTT/KM/SPOT).
+  const custoBase = custoContratacao + pedagio + custoExtra;
+  const linha = calcularLinhaComposicao(custoBase, ativo.mkp, advalorem, pedagio, aliquota);
+
+  if (!linha || linha.total === null || linha.total === undefined) {
+    $("dreManualTabela").innerHTML = "";
+    $("dreManualVazio").hidden = false;
+    $("dreManualVazio").textContent = !ativo.mkp
+      ? "MKP indefinido — os percentuais de venda somam 100% ou mais."
+      : "Sem alíquota de ICMS cadastrada para essa Origem/Destino — cadastre na aba ICMS.";
+    $("dreManualPctBox").hidden = true;
+    return;
+  }
+
+  $("dreManualVazio").hidden = true;
+  const dManual = calcularDreLado(
+    linha.total,
+    custoBase,
+    linha.icms,
+    pedagio,
+    valorMercadoria,
+    ativo.pctImpostos,
+    ativo.pctComissao,
+    ativo.pctCustoFixo,
+    custoExtra,
+    ""
+  );
+  preencherTabelaDre("dreManualTabela", dManual);
+
+  if (valorMercadoria > 0) {
+    $("dreManualPctBox").hidden = false;
+    $("dreManualPct").textContent = fmtNum((linha.total / valorMercadoria) * 100, 2) + "%";
+  } else {
+    $("dreManualPctBox").hidden = true;
+  }
+}
+
+[
+  "dreManualCustoContratacao",
+  "dreManualPedagio",
+  "dreManualCustoExtra",
+  "dreManualValorMercadoria",
+].forEach((id) => $(id).addEventListener("input", calcularDreManual));
+$("mkpSelecionadoManual").addEventListener("change", calcularDreManual);
+
+/* ============================================================
    Init — busca os dados no banco compartilhado ANTES de renderizar
    qualquer cadastro, para nunca mostrar telas vazias por um instante.
    ============================================================ */
@@ -3290,6 +3412,8 @@ async function iniciarApp() {
   renderVenda();
   renderTabelaMkp();
   preencherSelectMkp();
+  preencherSelectMkpManual();
+  preencherTipoVeiculoManual();
   preencherFiltroIcms();
   renderTabelaIcms();
   $("ajusteKm").value = ajusteKmPct;

@@ -412,7 +412,7 @@
       <p class="hint">Valor de referência por km rodado, multiplicado pela distância entre origem e destino.</p>
       <table class="editable-table" id="tabelaVeiculos">
         <thead>
-          <tr><th>Tipo de Veículo</th><th>Valor por KM (R$)</th><th></th></tr>
+          <tr><th>Tipo de Veículo</th><th>Valor por KM (R$)</th><th>Peso máx. (kg)</th><th></th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -685,7 +685,7 @@
           <thead>
             <tr>
               <th>Nº Cotação</th><th>Data/Hora</th><th>Vendedor</th><th>Origem</th><th>Destino</th><th>Km</th>
-              <th>Pedágio</th><th>Valor Mercadoria</th><th>Total ANTT</th><th>Total por KM</th><th>Total SPOT</th><th></th>
+              <th>Pedágio</th><th>Valor Mercadoria</th><th>Total ANTT</th><th>Total por KM</th><th>Total SPOT</th><th></th><th></th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -877,6 +877,8 @@
     <button type="button" id="btnFecharDetalheCotacao" class="btn-secondary">Fechar</button>
   </div>
 </div>
+
+<div id="cotacaoPrint" aria-hidden="true"></div>
 
 <footer>
   <p>Dados compartilhados entre todos os acessos &middot; distância via OpenStreetMap/OSRM, OpenRouteService ou QualP</p>

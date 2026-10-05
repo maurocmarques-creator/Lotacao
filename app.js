@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "24/09/2026 13:34";
+const BUILD_TIMESTAMP = "05/10/2026 14:07";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -26,11 +26,11 @@ const DEFAULT_ANTT = [
 ];
 
 const DEFAULT_VEICULOS = [
-  { tipo: "Fiorino", valorKm: 2.80 },
-  { tipo: "Van", valorKm: 3.60 },
-  { tipo: "3/4", valorKm: 5.50 },
-  { tipo: "Truck", valorKm: 6.50 },
-  { tipo: "Carreta", valorKm: 8.50 },
+  { tipo: "Fiorino", valorKm: 2.80, pesoMax: 650 },
+  { tipo: "Van", valorKm: 3.60, pesoMax: 1500 },
+  { tipo: "3/4", valorKm: 5.50, pesoMax: 3500 },
+  { tipo: "Truck", valorKm: 6.50, pesoMax: 14000 },
+  { tipo: "Carreta", valorKm: 8.50, pesoMax: 27000 },
 ];
 
 const DEFAULT_VENDA = { pctCustoFixo: 5, pctImpostos: 8, pctMargem: 11, pctComissao: 3, pctAdvalorem: 0 };
@@ -1514,6 +1514,7 @@ function renderTabelaVeiculos() {
     tr.innerHTML = `
       <td><input type="text" value="${row.tipo}" data-field="tipo" data-idx="${idx}"></td>
       <td><input type="number" min="0" step="0.01" value="${row.valorKm}" data-field="valorKm" data-idx="${idx}"></td>
+      <td><input type="number" min="0" step="1" value="${row.pesoMax || ""}" placeholder="ex.: 27000" data-field="pesoMax" data-idx="${idx}"></td>
       <td><button type="button" class="btn-remove" data-remove="${idx}" title="Remover">&times;</button></td>
     `;
     tbody.appendChild(tr);
@@ -1523,7 +1524,7 @@ function renderTabelaVeiculos() {
     inp.addEventListener("input", () => {
       const idx = parseInt(inp.dataset.idx, 10);
       const field = inp.dataset.field;
-      veiculosTable[idx][field] = field === "valorKm" ? parseFloat(inp.value) || 0 : inp.value;
+      veiculosTable[idx][field] = field === "valorKm" || field === "pesoMax" ? parseFloat(inp.value) || 0 : inp.value;
     });
   });
   tbody.querySelectorAll("[data-remove]").forEach((btn) => {
@@ -1535,7 +1536,7 @@ function renderTabelaVeiculos() {
 }
 
 $("btnAddVeiculo").addEventListener("click", () => {
-  veiculosTable.push({ tipo: "Novo veículo", valorKm: 0 });
+  veiculosTable.push({ tipo: "Novo veículo", valorKm: 0, pesoMax: 0 });
   renderTabelaVeiculos();
 });
 
@@ -2408,9 +2409,17 @@ function renderHistorico() {
       <td>${fmtBRL(c.totalAntt)}</td>
       <td>${fmtBRL(c.totalMerc)}</td>
       <td>${c.spotDisponivel ? fmtBRL(c.totalSpot) : "—"}</td>
+      <td><button type="button" class="btn-secondary btn-imprimir-cotacao" data-imprimir-cotacao="${c.id}" title="Imprimir cotação formal (PDF)">Imprimir</button></td>
       <td><button type="button" class="btn-remove" data-remove-cotacao="${c.id}" title="Remover">&times;</button></td>
     `;
     tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("[data-imprimir-cotacao]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      imprimirCotacao(btn.dataset.imprimirCotacao);
+    });
   });
 
   tbody.querySelectorAll("[data-remove-cotacao]").forEach((btn) => {
@@ -2733,6 +2742,105 @@ function abrirDreProjetado(id) {
 }
 
 $("btnVoltarHistorico").addEventListener("click", () => ativarAba("historico"));
+
+/* ============================================================
+   Cotação formal (impressão / PDF) — usa o Total "Efetivo", o mesmo do DRE Projetado
+   ============================================================ */
+const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+
+function localComUf(texto, uf) {
+  const t = (texto || "").trim();
+  if (!t) return "—";
+  if (!uf || /(\/|-|,)\s*[A-Za-z]{2}\s*$/.test(t)) return t;
+  return `${t} / ${uf}`;
+}
+
+const GENERALIDADES_COTACAO = [
+  ["Ajudante", "Esta cotação não contempla ajudante. Caso necessário, o valor é de R$ 250,00 por ajudante."],
+  ["Tempo de descarga", "O tempo de descarga incluso é de 3 horas. Ultrapassado esse prazo, será cobrado o valor de R$ 150,00 por hora parada."],
+  ["Descarga sem ajudante", "Caso o local não permita o ajudante e haja custo de descarga, o valor será repassado com acréscimo de 25%."],
+  ["Validade", "Valores válidos por 5 dias úteis a partir da emissão e sujeitos à confirmação de disponibilidade de veículo."],
+  ["Seguro", "O valor averbado e reclamado em caso de sinistro será o constante na nota fiscal."],
+  ["Reforma tributária", "A partir de 1º/01/2027, os valores poderão ser acrescidos de CBS e IBS (EC 132/2023 e LC 214/2025), conforme a legislação vigente à época do fato gerador."],
+];
+
+function imprimirCotacao(id) {
+  const c = historicoCotacoes.find((item) => item.id === id);
+  if (!c) return;
+  if (c.totalEfetivo == null || c.icmsEfetivo == null) {
+    alert("Esta cotação não tem o valor final (Custo Efetivo) calculado, então não dá para gerar a cotação formal.");
+    return;
+  }
+
+  const veic = veiculosTable.find((v) => v.tipo === c.tipoVeiculoMercado);
+  const pesoMax = veic && veic.pesoMax ? `${fmtNum(veic.pesoMax, 0)} kg` : "—";
+  const aliq = Number(c.aliquotaIcms || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+  const linhas = [
+    ["Frete Peso", "Frete rodoviário de carga fechada (lotação)", c.fretePesoEfetivo],
+    ["Seguro", "Seguro da mercadoria transportada", c.advalorem],
+  ];
+  if ((c.pedagio || 0) > 0) linhas.push(["Pedágio", "Pedágio estimado do trajeto (ida)", c.pedagio]);
+  linhas.push([`ICMS (${aliq}%)`, "Imposto estadual, calculado por dentro conforme legislação vigente", c.icmsEfetivo]);
+
+  const numero = escHtml(c.numeroFormatado || "—");
+  $("cotacaoPrint").innerHTML = `
+    <div class="cp-pagina">
+      <div class="cp-topo">
+        <div class="cp-empresa">
+          <div class="cp-marca">PORTOEXPRESS</div>
+          <div class="cp-marca-sub">LOGÍSTICA LTDA</div>
+          <div class="cp-dados">CNPJ: 22.725.000/0001-91 &nbsp;|&nbsp; Av. Gov. Adolfo Konder, 2720 - Itajaí/SC &nbsp;|&nbsp; CEP 88.308-002<br>(47) 3348-1714 / 3319-5982</div>
+        </div>
+        <div class="cp-selo"><small>COTAÇÃO DE FRETE</small><strong>Nº ${numero}</strong><span>Frete Fechado · Lotação</span></div>
+      </div>
+      <div class="cp-faixa-laranja"></div>
+      <div class="cp-corpo">
+        <div class="cp-meta">
+          <span>Emitida em: ${new Date(c.criadoEm).toLocaleDateString("pt-BR")}</span>
+          <span>Validade da proposta: 5 dias úteis</span>
+          <span>${c.vendedor ? "Executivo de Vendas: " + escHtml(c.vendedor) : ""}</span>
+        </div>
+
+        <div class="cp-secao">TRAJETO E VEÍCULO</div>
+        <div class="cp-grade">
+          <div><label>Origem</label><b>${escHtml(localComUf(c.origem, c.ufOrigem))}</b></div>
+          <div><label>Destino</label><b>${escHtml(localComUf(c.destino, c.ufDestino))}</b></div>
+          <div><label>Veículo considerado</label><b>${escHtml(c.tipoVeiculoMercado || "—")}</b></div>
+          <div><label>Peso máximo do veículo</label><b>${escHtml(pesoMax)}</b></div>
+        </div>
+
+        <div class="cp-secao">VALORES DO TRANSPORTE</div>
+        ${linhas.map(([n, d, v]) => `<div class="cp-linha"><div><b>${escHtml(n)}</b><small>${escHtml(d)}</small></div><strong>${fmtBRL(v)}</strong></div>`).join("")}
+        <div class="cp-total"><span>FRETE TOTAL</span><strong>${fmtBRL(c.totalEfetivo)}</strong></div>
+
+        <div class="cp-secao">GENERALIDADES</div>
+        ${GENERALIDADES_COTACAO.map(([n, t], i) => `<div class="cp-gen"><span class="cp-num">${i + 1}</span><b>${n}</b><p>${t}</p></div>`).join("")}
+
+        <div class="cp-secao">ACEITE</div>
+        <div class="cp-aceite">
+          <div><b>PORTOEXPRESS LOGÍSTICA LTDA</b><i></i><small>Executivo de Vendas</small></div>
+          <div><b>CLIENTE / EMPRESA</b><i></i><small>Nome / Cargo · CNPJ · Data</small></div>
+        </div>
+      </div>
+      <div class="cp-rodape"><span>PORTOEXPRESS LOGÍSTICA LTDA</span><span>Cotação Nº ${numero}</span><span>Página 1 de 1</span></div>
+    </div>`;
+
+  const tituloOriginal = document.title;
+  const estiloPagina = document.createElement("style");
+  estiloPagina.textContent = "@page { size: A4; margin: 0; }";
+  document.head.appendChild(estiloPagina);
+  document.body.classList.add("imprimindo-cotacao");
+  document.title = `Cotacao-${String(c.numeroFormatado || "").replace("/", "-")}`;
+  const limpar = () => {
+    document.body.classList.remove("imprimindo-cotacao");
+    estiloPagina.remove();
+    document.title = tituloOriginal;
+    $("cotacaoPrint").innerHTML = "";
+    window.removeEventListener("afterprint", limpar);
+  };
+  window.addEventListener("afterprint", limpar);
+  window.print();
+}
 
 /**
  * Exporta o DRE Projetado para .xlsx com FÓRMULAS de verdade (não valores fixos), para poder

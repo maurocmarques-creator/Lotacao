@@ -447,3 +447,55 @@ footer { text-align: center; color: var(--gray-500); font-size: 11.5px; padding:
   z-index: 0;
 }
 .mapa-icone-emoji { background: none; border: none; text-align: center; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+
+/* ============================================================
+   Cotação formal (impressão / PDF) — #cotacaoPrint
+   ============================================================ */
+#cotacaoPrint { display: none; }
+.btn-imprimir-cotacao { padding: 4px 10px; font-size: 12px; white-space: nowrap; }
+@media print {
+  body.imprimindo-cotacao { margin: 0; background: #fff; }
+  body.imprimindo-cotacao > *:not(#cotacaoPrint) { display: none !important; }
+  body.imprimindo-cotacao #cotacaoPrint { display: block; }
+  #cotacaoPrint, #cotacaoPrint * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-sizing: border-box; }
+}
+#cotacaoPrint { --cp-navy: #1F3864; --cp-orange: #ED7D31; --cp-grey: #F2F2F2; --cp-mute: #5F6B7A; --cp-txt: #202020; font-family: Arial, Helvetica, sans-serif; color: var(--cp-txt); }
+#cotacaoPrint .cp-pagina { width: 210mm; height: 296mm; display: flex; flex-direction: column; background: #fff; overflow: hidden; }
+#cotacaoPrint .cp-topo { background: var(--cp-navy); color: #fff; display: flex; justify-content: space-between; align-items: center; padding: 8mm 12.7mm 7mm; }
+#cotacaoPrint .cp-marca { font-size: 24pt; font-weight: 700; letter-spacing: .3px; line-height: 1; }
+#cotacaoPrint .cp-marca-sub { font-size: 10pt; color: #BFD0EA; margin: 1.5mm 0 3mm; }
+#cotacaoPrint .cp-dados { font-size: 7.8pt; line-height: 1.5; }
+#cotacaoPrint .cp-selo { background: #fff; color: var(--cp-navy); border-radius: 1.5mm; width: 67mm; padding: 4mm 3mm; text-align: center; }
+#cotacaoPrint .cp-selo small { display: block; font-size: 9pt; font-weight: 700; color: var(--cp-mute); }
+#cotacaoPrint .cp-selo strong { display: block; font-size: 21pt; margin: 1mm 0; }
+#cotacaoPrint .cp-selo span { font-size: 8pt; color: #2E75B6; }
+#cotacaoPrint .cp-faixa-laranja { height: 1.1mm; background: var(--cp-orange); }
+#cotacaoPrint .cp-corpo { padding: 0 12.7mm; flex: 1; }
+#cotacaoPrint .cp-meta { display: flex; justify-content: space-between; font-size: 8.5pt; color: var(--cp-mute); padding: 4.5mm 0 3.5mm; }
+#cotacaoPrint .cp-secao { background: var(--cp-navy); color: #fff; font-weight: 700; font-size: 9.5pt; padding: 1.9mm 4mm; border-left: 1.4mm solid var(--cp-orange); margin-top: 5mm; }
+#cotacaoPrint .cp-secao:first-of-type { margin-top: 0; }
+#cotacaoPrint .cp-grade { display: grid; grid-template-columns: 1fr 1fr; }
+#cotacaoPrint .cp-grade > div { padding: 2mm 3.5mm; }
+#cotacaoPrint .cp-grade > div:nth-child(-n+2) { background: var(--cp-grey); }
+#cotacaoPrint .cp-grade label { display: block; font-size: 6.8pt; font-weight: 700; color: var(--cp-mute); text-transform: uppercase; }
+#cotacaoPrint .cp-grade b { display: block; font-size: 11pt; color: var(--cp-navy); margin-top: .6mm; }
+#cotacaoPrint .cp-linha { display: flex; justify-content: space-between; align-items: center; padding: 2mm 3.5mm; }
+#cotacaoPrint .cp-linha:nth-of-type(odd) { background: var(--cp-grey); }
+#cotacaoPrint .cp-linha b { display: block; font-size: 10pt; }
+#cotacaoPrint .cp-linha small { display: block; font-size: 7.5pt; color: var(--cp-mute); margin-top: .4mm; }
+#cotacaoPrint .cp-linha strong { font-size: 11pt; }
+#cotacaoPrint .cp-total { background: var(--cp-navy); color: #fff; display: flex; justify-content: space-between; align-items: center; padding: 3.2mm 3.5mm; }
+#cotacaoPrint .cp-total span { font-size: 12pt; font-weight: 700; }
+#cotacaoPrint .cp-total strong { font-size: 17pt; }
+#cotacaoPrint .cp-gen { display: grid; grid-template-columns: 6mm 36mm 1fr; column-gap: 2mm; align-items: start; padding: 2mm 3.5mm; font-size: 8.3pt; line-height: 1.4; break-inside: avoid; }
+#cotacaoPrint .cp-gen:nth-of-type(odd) { background: var(--cp-grey); }
+#cotacaoPrint .cp-gen p { margin: 0; }
+#cotacaoPrint .cp-gen b { color: var(--cp-navy); font-size: 8.8pt; }
+#cotacaoPrint .cp-num { background: var(--cp-orange); color: #fff; border-radius: 50%; width: 4.8mm; height: 4.8mm; font-size: 7.5pt; font-weight: 700; display: inline-grid; place-items: center; }
+#cotacaoPrint .cp-aceite { display: grid; grid-template-columns: 1fr 1fr; border: .25mm solid #D0D5DD; border-top: 0; }
+#cotacaoPrint .cp-aceite > div { padding: 3mm 4mm; height: 22mm; position: relative; }
+#cotacaoPrint .cp-aceite > div + div { border-left: .25mm solid #D0D5DD; }
+#cotacaoPrint .cp-aceite b { font-size: 7.8pt; color: var(--cp-navy); }
+#cotacaoPrint .cp-aceite i { position: absolute; left: 5mm; right: 5mm; bottom: 8mm; border-top: .25mm solid var(--cp-mute); }
+#cotacaoPrint .cp-aceite small { position: absolute; left: 0; right: 0; bottom: 3.5mm; text-align: center; font-size: 7pt; color: var(--cp-mute); }
+#cotacaoPrint .cp-rodape { background: var(--cp-navy); color: #fff; display: flex; justify-content: space-between; padding: 3.2mm 12.7mm; font-size: 7.5pt; font-weight: 700; }

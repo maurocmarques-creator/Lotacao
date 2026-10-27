@@ -112,20 +112,27 @@
 
   function parseList(txt) {
     const out = [];
+    const N = "(\\d+(?:[.,]\\d+)?)";
+    const reXpto = new RegExp(`(\\d+)[^\\d]*?${N}\\s*(?:cm|mm|m)?\\s*[x×X*]\\s*${N}\\s*(?:cm|mm|m)?\\s*[x×X*]\\s*${N}`);
+    // Tabela colada do Excel/planilha: Qtd, Comp, Larg, Alt separados por TAB, ; ou espaços
+    const reTabela = new RegExp(`^\\s*(\\d+)[\\t; ]+${N}[\\t; ]+${N}[\\t; ]+${N}\\s*$`);
     txt.split(/\r?\n/).forEach((line) => {
-      const m = line.match(/(\d+)[^\d]*?(\d+(?:[.,]\d+)?)\s*(?:cm|mm|m)?\s*[x×X*]\s*(\d+(?:[.,]\d+)?)\s*(?:cm|mm|m)?\s*[x×X*]\s*(\d+(?:[.,]\d+)?)/);
+      const m = line.match(reXpto) || line.match(reTabela);
       if (!m) return;
       let d = [num(m[2]), num(m[3]), num(m[4])];
       if (/\d\s*mm\b/i.test(line)) d = d.map((x) => x / 10);
       else if (d.every((x) => x < 10)) d = d.map((x) => x * 100);
-      out.push({ q: parseInt(m[1], 10), l: +d[0].toFixed(1), w: +d[1].toFixed(1), h: +d[2].toFixed(1), kg: "", st: true });
+      const t = { q: parseInt(m[1], 10), l: +d[0].toFixed(1), w: +d[1].toFixed(1), h: +d[2].toFixed(1), kg: "", st: true };
+      // mesma medida em linhas diferentes = mesmo tipo de caixa: soma a quantidade
+      const igual = out.find((o) => o.l === t.l && o.w === t.w && o.h === t.h);
+      if (igual) igual.q += t.q; else out.push(t);
     });
     return out;
   }
   $("fcBtnPaste").addEventListener("click", () => { const b = $("fcPasteBox"); b.hidden = !b.hidden; if (!b.hidden) $("fcPasteText").focus(); });
   function doImport(replace) {
     const r = parseList($("fcPasteText").value);
-    if (!r.length) { $("fcPasteMsg").textContent = "Nenhuma linha reconhecida. Use o formato “15 caixas com 146x82x96 cm”."; return; }
+    if (!r.length) { $("fcPasteMsg").textContent = "Nenhuma linha reconhecida. Use “15 caixas com 146x82x96 cm” ou colunas Qtd, Comp, Larg, Alt."; return; }
     S.types = replace ? r : S.types.concat(r); renderTypes(); save();
     $("fcPasteMsg").textContent = `${r.length} tipo(s) importado(s).`;
   }
@@ -170,10 +177,14 @@
       const ors = orients(it, o.tip).map((d) => ({ l: d.l + o.gap, w: d.w + o.gap, h: d.h, d }));
       let best = null, bk = null;
       for (const p of pts) {
-        for (const r of ors) {
+        for (let oi = 0; oi < ors.length; oi++) {
+          const r = ors[oi];
           if (p.x + r.l > C.L + EPS || p.y + r.w > C.W + EPS || p.z + r.h > C.H + EPS) continue;
+          // colisão não some enquanto o arranjo só ganha caixas: guarda por ponto + tipo + giro
+          const dk = it.ti * 8 + oi;
+          if (p.dead && p.dead.has(dk)) continue;
           const k = rule(p, r); if (bk && cmp(k, bk) >= 0) continue;
-          if (collide(P, p, r)) continue;
+          if (collide(P, p, r)) { (p.dead || (p.dead = new Set())).add(dk); continue; }
           if (p.z > EPS && !supported(P, p, r, o)) continue;
           best = { p, r }; bk = k;
         }

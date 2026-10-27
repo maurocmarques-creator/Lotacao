@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "26/10/2026 22:58";
+const BUILD_TIMESTAMP = "26/10/2026 23:02";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -1294,10 +1294,10 @@ function arredondarCentenaCima(v) {
 }
 
 /** Custo Efetivo: o valor considerado de fato para a operação.
- *  - KM ≥ 200: o maior entre Custo ANTT, Custo por KM e Custo SPOT (quando cadastrado),
- *    arredondado para cima na centena.
- *  - KM < 200: rotas curtas não usam ANTT/Custo por KM como referência — considera só o
- *    SPOT cadastrado (arredondado do mesmo jeito); sem SPOT cadastrado, mostra aviso. */
+ *  - Com SPOT cadastrado: o SPOT é sempre o custo considerado (valor negociado, já com pedágio),
+ *    sem arredondar e sem comparar com ANTT/Custo por KM.
+ *  - Sem SPOT e KM ≥ 200: o maior entre Custo ANTT e Custo por KM, arredondado para cima na centena.
+ *  - Sem SPOT e KM < 200: rotas curtas precisam de SPOT — mostra aviso. */
 function atualizarCustoEfetivo() {
   const km = state.kmDistancia || 0;
   const curto = km > 0 && km < 200;
@@ -1305,23 +1305,22 @@ function atualizarCustoEfetivo() {
   let base = null;
   let formula = "";
   let origemEfetivo = null;
+  let arredondar = true;
 
-  if (curto) {
-    if (state.spotDisponivel) {
-      base = state.custoSpot;
-      origemEfetivo = "SPOT";
-      formula = `KM < 200 (${fmtNum(km)} km) — considerado apenas o SPOT (${fmtBRL(state.custoSpot)}), arredondado para cima na centena`;
-    }
-  } else {
+  if (state.spotDisponivel) {
+    base = state.custoSpot;
+    origemEfetivo = "SPOT";
+    arredondar = false;
+    formula = `SPOT cadastrado (${fmtBRL(state.custoSpot)}) — tem prioridade sobre ANTT e Custo por KM`;
+  } else if (!curto) {
     const candidatos = [
       { nome: "ANTT", valor: state.custoAntt || 0 },
       { nome: "Custo por KM", valor: state.custoAprox || 0 },
     ];
-    if (state.spotDisponivel) candidatos.push({ nome: "SPOT", valor: state.custoSpot || 0 });
     const maior = candidatos.reduce((a, b) => (b.valor > a.valor ? b : a));
     base = maior.valor;
     origemEfetivo = maior.nome;
-    formula = `Maior entre ${candidatos.map((c) => `${c.nome} (${fmtBRL(c.valor)})`).join(", ")}, arredondado para cima na centena`;
+    formula = `Sem SPOT cadastrado — maior entre ${candidatos.map((c) => `${c.nome} (${fmtBRL(c.valor)})`).join(", ")}, arredondado para cima na centena`;
   }
 
   if (base === null) {
@@ -1333,7 +1332,7 @@ function atualizarCustoEfetivo() {
     return;
   }
 
-  const efetivo = arredondarCentenaCima(base);
+  const efetivo = arredondar ? arredondarCentenaCima(base) : base;
   $("resEfetivo").textContent = fmtBRL(efetivo);
   $("resEfetivoFormula").textContent = formula;
   $("resEfetivoAviso").hidden = true;

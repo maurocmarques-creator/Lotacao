@@ -111,31 +111,65 @@
     $("fc" + (S.types.length - 1) + "q").focus();
   });
 
+  /** Identifica a coluna pelo texto do cabeçalho (Qtd, Comp, Larg, Alt, Peso), em qualquer ordem. */
+  function colunaDoCabecalho(txt) {
+    const s = String(txt).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    if (/qt|quant|vol|cx|caix/.test(s)) return "q";
+    if (/comp|^c\b|length/.test(s)) return "l";
+    if (/larg|^l\b|width/.test(s)) return "w";
+    if (/alt|^a\b|height/.test(s)) return "h";
+    if (/peso|kg/.test(s)) return "kg";
+    return null;
+  }
   function parseList(txt) {
     const out = [];
     const N = "(\\d+(?:[.,]\\d+)?)";
     const reXpto = new RegExp(`(\\d+)[^\\d]*?${N}\\s*(?:cm|mm|m)?\\s*[x×X*]\\s*${N}\\s*(?:cm|mm|m)?\\s*[x×X*]\\s*${N}`);
-    // Tabela colada do Excel/planilha: Qtd, Comp, Larg, Alt separados por TAB, ; ou espaços
-    const reTabela = new RegExp(`^\\s*(\\d+)[\\t; ]+${N}[\\t; ]+${N}[\\t; ]+${N}\\s*$`);
-    txt.split(/\r?\n/).forEach((line) => {
-      const m = line.match(reXpto) || line.match(reTabela);
-      if (!m) return;
-      let d = [num(m[2]), num(m[3]), num(m[4])];
-      if (/\d\s*mm\b/i.test(line)) d = d.map((x) => x / 10);
+    const ehNumero = (c) => /^\d+(?:[.,]\d+)?$/.test(c);
+    let cols = null; // mapa vindo do cabeçalho da tabela colada, ex.: ["h","l","w"]
+    const add = (t, line) => {
+      let d = [t.l, t.w, t.h];
+      if (/\d\s*mm\b/i.test(line) || (cols && cols.mm)) d = d.map((x) => x / 10);
       else if (d.every((x) => x < 10)) d = d.map((x) => x * 100);
-      const t = { q: parseInt(m[1], 10), l: +d[0].toFixed(1), w: +d[1].toFixed(1), h: +d[2].toFixed(1), kg: "", st: true };
-      // mesma medida em linhas diferentes = mesmo tipo de caixa: soma a quantidade
-      const igual = out.find((o) => o.l === t.l && o.w === t.w && o.h === t.h);
-      if (igual) igual.q += t.q; else out.push(t);
+      const n = { q: t.q, l: +d[0].toFixed(1), w: +d[1].toFixed(1), h: +d[2].toFixed(1), kg: t.kg || "", st: true };
+      // mesma medida (e peso) em linhas diferentes = mesmo tipo de caixa: soma a quantidade
+      const igual = out.find((o) => o.l === n.l && o.w === n.w && o.h === n.h && String(o.kg) === String(n.kg));
+      if (igual) igual.q += n.q; else out.push(n);
+    };
+    txt.split(/\r?\n/).forEach((line) => {
+      if (!line.trim()) return;
+      const cells = line.split(/\t|;|\s{2,}/).map((c) => c.trim()).filter(Boolean);
+      // Cabeçalho de tabela (Excel): guarda a ordem das colunas
+      if (cells.length >= 3 && !cells.some(ehNumero)) {
+        const map = cells.map(colunaDoCabecalho);
+        if (map.includes("l") && map.includes("w") && map.includes("h")) { cols = map; cols.mm = /mm/i.test(line); return; }
+      }
+      // Linha de tabela: só números, separados por TAB, ; ou espaços
+      const nums = line.trim().split(/[\t; ]+/);
+      if (nums.length >= 3 && nums.every(ehNumero)) {
+        const v = nums.map(num);
+        let map = cols && cols.length === v.length ? cols : null;
+        if (!map) map = v.length === 3 ? ["l", "w", "h"] : v.length === 4 ? ["q", "l", "w", "h"] : v.length === 5 ? ["q", "l", "w", "h", "kg"] : null;
+        if (!map) return;
+        const t = { q: 1, kg: "" };
+        map.forEach((k, i) => { if (k) t[k] = v[i]; });
+        t.q = Math.max(1, Math.round(t.q || 1));
+        if (t.l > 0 && t.w > 0 && t.h > 0) add(t, line);
+        return;
+      }
+      // Texto livre: "15 caixas com 146x82x96 cm"
+      const m = line.match(reXpto);
+      if (m) add({ q: parseInt(m[1], 10), l: num(m[2]), w: num(m[3]), h: num(m[4]) }, line);
     });
     return out;
   }
   $("fcBtnPaste").addEventListener("click", () => { const b = $("fcPasteBox"); b.hidden = !b.hidden; if (!b.hidden) $("fcPasteText").focus(); });
   function doImport(replace) {
     const r = parseList($("fcPasteText").value);
-    if (!r.length) { $("fcPasteMsg").textContent = "Nenhuma linha reconhecida. Use “15 caixas com 146x82x96 cm” ou colunas Qtd, Comp, Larg, Alt."; return; }
+    if (!r.length) { $("fcPasteMsg").textContent = "Nenhuma linha reconhecida. Cole a tabela com o cabeçalho (Qtd, Comp, Larg, Alt — em qualquer ordem; sem Qtd, cada linha vale 1 caixa) ou use “15 caixas com 146x82x96 cm”."; return; }
     S.types = replace ? r : S.types.concat(r); renderTypes(); save();
-    $("fcPasteMsg").textContent = `${r.length} tipo(s) importado(s).`;
+    const vols = r.reduce((t, x) => t + x.q, 0);
+    $("fcPasteMsg").textContent = `${vols} volume(s) importado(s) em ${r.length} tipo(s).`;
   }
   $("fcBtnImport").addEventListener("click", () => doImport(true));
   $("fcBtnAppend").addEventListener("click", () => doImport(false));

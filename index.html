@@ -435,12 +435,13 @@
         do navegador).
       </p>
       <p class="hint">
-        Cadastre um valor fixo negociado (custo do veículo, <b>sem pedágio</b>) para um trecho
+        Cadastre um valor fixo negociado (custo do veículo, <b>já com o pedágio incluso</b>) para um trecho
         (cidade/UF origem → cidade/UF destino) e tipo de veículo específicos. Se o trecho
         calculado bater com uma linha cadastrada aqui (mesma origem, destino e veículo), o Custo
-        Aproximado passa a ser exatamente esse valor cadastrado — sem somar pedágio (o pedágio
-        entra separado, só na Composição do Valor do Frete). Sem SPOT correspondente, o app usa
-        o Custo por KM normalmente, que aí sim soma o pedágio ao custo.
+        Aproximado passa a ser exatamente esse valor cadastrado — sem somar pedágio por cima. Na
+        venda o pedágio aparece destacado e é descontado do Frete Peso; no DRE a contratação
+        mostra Frete Peso + Pedágio, que somam o valor do SPOT. Sem SPOT correspondente, o app usa
+        o Custo por KM normalmente, que soma o pedágio ao custo.
       </p>
 
       <div class="spot-import-row">

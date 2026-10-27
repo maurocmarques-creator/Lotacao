@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "05/10/2026 14:07";
+const BUILD_TIMESTAMP = "26/10/2026 22:58";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -1238,7 +1238,7 @@ async function calcular() {
     $("resSpot").textContent = fmtBRL(custoSpot);
     $("resSpotFormula").textContent = spotViaHub
       ? `${fmtBRL(spot.valor)} (SPOT de Itajaí - SC, aplicado por origem no raio de 50 km do hub)${servicoAdicionalTexto} — ${veiculo}`
-      : `${fmtBRL(spot.valor)} (SPOT cadastrado, sem pedágio)${servicoAdicionalTexto} — ${veiculo}`;
+      : `${fmtBRL(spot.valor)} (SPOT cadastrado, já com pedágio)${servicoAdicionalTexto} — ${veiculo}`;
     // SPOT cobre só Origem → o ponto usado no cálculo — com pontos adicionais cadastrados,
     // o valor pode não incluir o custo deles (ex.: paradas intermediárias), então precisa
     // avisar pra somar à parte. Quando vem do hub Itajaí (sem cadastro exato pra cidade
@@ -1304,10 +1304,12 @@ function atualizarCustoEfetivo() {
 
   let base = null;
   let formula = "";
+  let origemEfetivo = null;
 
   if (curto) {
     if (state.spotDisponivel) {
       base = state.custoSpot;
+      origemEfetivo = "SPOT";
       formula = `KM < 200 (${fmtNum(km)} km) — considerado apenas o SPOT (${fmtBRL(state.custoSpot)}), arredondado para cima na centena`;
     }
   } else {
@@ -1318,6 +1320,7 @@ function atualizarCustoEfetivo() {
     if (state.spotDisponivel) candidatos.push({ nome: "SPOT", valor: state.custoSpot || 0 });
     const maior = candidatos.reduce((a, b) => (b.valor > a.valor ? b : a));
     base = maior.valor;
+    origemEfetivo = maior.nome;
     formula = `Maior entre ${candidatos.map((c) => `${c.nome} (${fmtBRL(c.valor)})`).join(", ")}, arredondado para cima na centena`;
   }
 
@@ -1336,11 +1339,15 @@ function atualizarCustoEfetivo() {
   $("resEfetivoAviso").hidden = true;
   $("resEfetivoAviso").textContent = "";
   state.custoEfetivo = efetivo;
+  state.origemEfetivo = origemEfetivo;
 }
 
-function calcularLinhaComposicao(custoBase, mkp, advalorem, pedagio, aliquota) {
+// Regra interna: o SPOT cadastrado já vem com o pedágio dentro (ANTT e Custo por KM não —
+// o pedágio é somado a eles). Na venda o pedágio aparece destacado, então no SPOT ele sai do
+// custo antes do MKP: Frete Peso + Pedágio fecham no valor do SPOT, sem cobrar o pedágio 2x.
+function calcularLinhaComposicao(custoBase, mkp, advalorem, pedagio, aliquota, pedagioJaNoCusto = false) {
   if (!mkp) return null;
-  const fretePeso = custoBase / mkp;
+  const fretePeso = (pedagioJaNoCusto ? Math.max(custoBase - pedagio, 0) : custoBase) / mkp;
   const subtotal = fretePeso + advalorem + pedagio;
   if (aliquota === null || aliquota === undefined || aliquota >= 100) {
     return { fretePeso, advalorem, pedagio, icms: null, total: null };
@@ -1394,10 +1401,10 @@ function atualizarComposicao() {
 
   const linhaAntt = calcularLinhaComposicao(state.custoAntt, mkp, advalorem, pedagio, aliquota);
   const linhaMerc = calcularLinhaComposicao(state.custoAprox, mkp, advalorem, pedagio, aliquota);
-  const linhaSpot = state.spotDisponivel ? calcularLinhaComposicao(state.custoSpot, mkp, advalorem, pedagio, aliquota) : null;
+  const linhaSpot = state.spotDisponivel ? calcularLinhaComposicao(state.custoSpot, mkp, advalorem, pedagio, aliquota, true) : null;
   const linhaEfetivo =
     state.custoEfetivo !== null && state.custoEfetivo !== undefined
-      ? calcularLinhaComposicao(state.custoEfetivo, mkp, advalorem, pedagio, aliquota)
+      ? calcularLinhaComposicao(state.custoEfetivo, mkp, advalorem, pedagio, aliquota, state.origemEfetivo === "SPOT")
       : null;
 
   preencherColunaComposicao("Antt", linhaAntt);

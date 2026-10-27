@@ -28,7 +28,7 @@
   const DEFAULT = {
     cotacao: "",
     truck: { L: "15,80", W: "2,60", H: "2,80", cap: "" },
-    opts: { stack: true, tip: false, sup: 80, gap: 0 },
+    opts: { stack: true, tip: false, sup: 80, gap: 0, loss: 0 },
     types: [
       { q: 15, l: 146, w: 82, h: 96, kg: "", st: true },
       { q: 29, l: 107, w: 62, h: 73, kg: "", st: true },
@@ -55,7 +55,7 @@
   function fillTruck() {
     $("fcCotacao").value = S.cotacao || "";
     $("fcL").value = S.truck.L; $("fcW").value = S.truck.W; $("fcH").value = S.truck.H; $("fcCap").value = S.truck.cap || "";
-    $("fcStack").checked = !!S.opts.stack; $("fcTip").checked = !!S.opts.tip; $("fcSup").value = S.opts.sup; $("fcGap").value = S.opts.gap;
+    $("fcStack").checked = !!S.opts.stack; $("fcTip").checked = !!S.opts.tip; $("fcSup").value = S.opts.sup; $("fcGap").value = S.opts.gap; $("fcLoss").value = S.opts.loss ?? 0;
     syncPreset();
     atualizarCotacaoInfo();
   }
@@ -76,6 +76,7 @@
   $("fcTip").addEventListener("change", (e) => { S.opts.tip = e.target.checked; save(); });
   $("fcSup").addEventListener("input", (e) => { S.opts.sup = e.target.value; save(); });
   $("fcGap").addEventListener("input", (e) => { S.opts.gap = e.target.value; save(); });
+  $("fcLoss").addEventListener("input", (e) => { S.opts.loss = e.target.value; save(); });
 
   function renderTypes() {
     $("fcTypesBody").innerHTML = S.types.map((t, i) => `<tr>
@@ -179,7 +180,7 @@
       for (const p of pts) {
         for (let oi = 0; oi < ors.length; oi++) {
           const r = ors[oi];
-          if (p.x + r.l > C.L + EPS || p.y + r.w > C.W + EPS || p.z + r.h > C.H + EPS) continue;
+          if (p.x + r.l > C.Lu + EPS || p.y + r.w > C.W + EPS || p.z + r.h > C.H + EPS) continue;
           // colisão não some enquanto o arranjo só ganha caixas: guarda por ponto + tipo + giro
           const dk = it.ti * 8 + oi;
           if (p.dead && p.dead.has(dk)) continue;
@@ -200,7 +201,7 @@
         [b.x, b.y, Z], [projX(P, b.x, b.y, Z), b.y, Z], [b.x, projY(P, b.x, b.y, Z), Z],
       ];
       for (const [x, y, z] of np) {
-        if (x >= C.L - EPS || y >= C.W - EPS || z >= C.H - EPS) continue;
+        if (x >= C.Lu - EPS || y >= C.W - EPS || z >= C.H - EPS) continue;
         const key = x.toFixed(3) + "|" + y.toFixed(3) + "|" + z.toFixed(3);
         if (seen.has(key)) continue; seen.add(key);
         if (collide(P, { x, y, z }, { l: EPS * 4, w: EPS * 4, h: EPS * 4 })) continue;
@@ -277,7 +278,8 @@
     const o = { stack: !!S.opts.stack, tip: !!S.opts.tip, sup: Math.min(100, Math.max(10, num(S.opts.sup) || 80)), gap: Math.max(0, num(S.opts.gap) || 0) };
     const bad = (m) => { setVerdict("bad", "Confira os dados", m); $("fcMetrics").innerHTML = ""; };
     if (!(L > 0 && W > 0 && H > 0)) return bad("Informe comprimento, largura e altura internos do baú em metros (ex.: 15,80).");
-    C = { L: L * 100, W: W * 100, H: H * 100, cap: num(S.truck.cap) };
+    const perda = Math.min(50, Math.max(0, num(S.opts.loss) || 0));
+    C = { L: L * 100, W: W * 100, H: H * 100, cap: num(S.truck.cap), perda, Lu: L * 100 * (1 - perda / 100) };
     const items = [];
     for (let ti = 0; ti < S.types.length; ti++) {
       const t = S.types[ti]; const q = Math.round(num(t.q)), l = num(t.l), w = num(t.w), h = num(t.h), kg = num(t.kg);
@@ -307,22 +309,23 @@
     const P = R.order, un = R.un, items = R.items;
     const used = P.reduce((m, b) => Math.max(m, b.x + b.d.l), 0);
     const maxH = P.reduce((m, b) => Math.max(m, b.z + b.d.h), 0);
-    const vTot = items.reduce((t, i) => t + vol(i), 0) / 1e6, vIn = P.reduce((t, b) => t + vol(b.d), 0) / 1e6, vBox = C.L * C.W * C.H / 1e6;
+    const vTot = items.reduce((t, i) => t + vol(i), 0) / 1e6, vIn = P.reduce((t, b) => t + vol(b.d), 0) / 1e6, vBox = C.Lu * C.W * C.H / 1e6;
+    const compUtil = C.perda > 0 ? `${fmt(C.Lu / 100)} m úteis (${fmt(C.L / 100)} m menos ${fmt(C.perda, 1)}% de perda)` : `${fmt(C.L / 100)} m de comprimento`;
     const kgTot = items.reduce((t, i) => t + i.kg, 0), kgIn = P.reduce((t, b) => t + b.it.kg, 0);
     const overKg = C.cap > 0 && kgTot > C.cap;
     if (!un.length && !overKg) {
-      setVerdict("ok", "Toda a carga entra no baú", `Ocupa <b>${fmt(used / 100)} m</b> dos ${fmt(C.L / 100)} m de comprimento — sobram <b>${fmt((C.L - used) / 100)} m</b> livres junto às portas. Siga a sequência abaixo: da cabine para as portas, de baixo para cima.`);
+      setVerdict("ok", "Toda a carga entra no baú", `Ocupa <b>${fmt(used / 100)} m</b> dos ${compUtil} — sobram <b>${fmt((C.Lu - used) / 100)} m</b> livres junto às portas. Siga a sequência abaixo: da cabine para as portas, de baixo para cima.`);
     } else if (!un.length && overKg) {
       setVerdict("warn", "Cabe no espaço, mas passa do peso", `A carga soma ${fmt0(kgTot)} kg para ${fmt0(C.cap)} kg de capacidade (${fmt0(kgTot - C.cap)} kg acima).`);
     } else {
       const byT = {}; un.forEach((i) => (byT[i.ti] = (byT[i.ti] || 0) + 1));
       const list = Object.entries(byT).map(([t, n]) => `${n} × tipo ${letter(+t)}`).join(", ");
       const why = vTot > vBox ? ` O volume da carga (${fmt(vTot)} m³) já passa o volume do baú (${fmt(vBox)} m³).` : "";
-      setVerdict("bad", `${un.length} volume${un.length > 1 ? "s ficaram" : " ficou"} de fora`, `Não couberam: ${list}.${why} Tente permitir deitar caixas, reduzir o apoio mínimo ou usar um baú maior.`);
+      setVerdict("bad", `${un.length} volume${un.length > 1 ? "s ficaram" : " ficou"} de fora`, `Não couberam: ${list}.${why} Tente permitir deitar caixas, reduzir o apoio mínimo${C.perda > 0 ? ", reduzir a perda de espaço" : ""} ou usar um baú maior.`);
     }
     const m = [
-      { v: `${fmt(used / 100)} m`, s: `comprimento usado de ${fmt(C.L / 100)} m`, p: used / C.L },
-      { v: `${fmt(vIn)} m³`, s: `carga no baú · ${fmt(vIn / vBox * 100, 0)}% de ${fmt(vBox, 1)} m³`, p: vIn / vBox },
+      { v: `${fmt(used / 100)} m`, s: `comprimento usado de ${fmt((C.perda > 0 ? C.Lu : C.L) / 100)} m${C.perda > 0 ? " úteis" : ""}`, p: used / C.Lu },
+      { v: `${fmt(vIn)} m³`, s: `carga no baú · ${fmt(vIn / vBox * 100, 0)}% de ${fmt(vBox, 1)} m³${C.perda > 0 ? " úteis" : ""}`, p: vIn / vBox },
       { v: `${P.length}/${items.length}`, s: "volumes carregados", p: P.length / items.length },
       { v: `${fmt(maxH / 100)} m`, s: `altura máxima de ${fmt(C.H / 100)} m`, p: maxH / C.H },
     ];

@@ -9,6 +9,15 @@
   const COLORS = ["#E3A23B", "#4A8CCB", "#58A96A", "#D0685A", "#8C71C6", "#35ADA5", "#C77CAD", "#A39447", "#6E83A6", "#DB8B4B", "#7FB24A", "#B9795A"];
   const letter = (i) => String.fromCharCode(65 + (i % 26)) + (i >= 26 ? Math.floor(i / 26) : "");
   const color = (i) => COLORS[i % COLORS.length];
+  // Na ordem de chegada cada linha da carga é identificada pelo número (L1, L2...);
+  // senão, pela letra do tipo. A cor segue a medida: linhas com a mesma caixa têm a mesma cor.
+  const modoChegada = () => !!(S && S.opts && S.opts.seq);
+  const tag = (i) => (modoChegada() ? "L" + (i + 1) : letter(i));
+  const corT = (i) => {
+    const t = S.types[i];
+    const j = t ? S.types.findIndex((o) => num(o.l) === num(t.l) && num(o.w) === num(t.w) && num(o.h) === num(t.h)) : i;
+    return color(j < 0 ? i : j);
+  };
   const num = (v) => { const n = parseFloat(String(v ?? "").trim().replace(/\s/g, "").replace(",", ".")); return isFinite(n) ? n : NaN; };
   const fmt = (n, d = 2) => n.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
   const fmt0 = (n) => Math.round(n).toLocaleString("pt-BR");
@@ -56,6 +65,7 @@
     $("fcCotacao").value = S.cotacao || "";
     $("fcL").value = S.truck.L; $("fcW").value = S.truck.W; $("fcH").value = S.truck.H; $("fcCap").value = S.truck.cap || "";
     $("fcStack").checked = !!S.opts.stack; $("fcTip").checked = !!S.opts.tip; $("fcSup").value = S.opts.sup; $("fcGap").value = S.opts.gap; $("fcLoss").value = S.opts.loss ?? 0;
+    $("fcSeq").checked = !!S.opts.seq;
     syncPreset();
     atualizarCotacaoInfo();
   }
@@ -77,17 +87,18 @@
   $("fcSup").addEventListener("input", (e) => { S.opts.sup = e.target.value; save(); });
   $("fcGap").addEventListener("input", (e) => { S.opts.gap = e.target.value; save(); });
   $("fcLoss").addEventListener("input", (e) => { S.opts.loss = e.target.value; save(); });
+  $("fcSeq").addEventListener("change", (e) => { S.opts.seq = e.target.checked; save(); renderTypes(); });
 
   function renderTypes() {
     $("fcTypesBody").innerHTML = S.types.map((t, i) => `<tr>
-      <td><span class="fc-chip" style="background:${color(i)}">${letter(i)}</span></td>
-      <td class="q"><input class="fc-num" id="fc${i}q" data-i="${i}" data-k="q" value="${esc(t.q)}" inputmode="numeric" aria-label="Quantidade tipo ${letter(i)}"></td>
-      <td class="d"><input class="fc-num" id="fc${i}l" data-i="${i}" data-k="l" value="${esc(t.l)}" inputmode="decimal" aria-label="Comprimento tipo ${letter(i)}"></td>
-      <td class="d"><input class="fc-num" id="fc${i}w" data-i="${i}" data-k="w" value="${esc(t.w)}" inputmode="decimal" aria-label="Largura tipo ${letter(i)}"></td>
-      <td class="d"><input class="fc-num" id="fc${i}h" data-i="${i}" data-k="h" value="${esc(t.h)}" inputmode="decimal" aria-label="Altura tipo ${letter(i)}"></td>
-      <td class="k"><input class="fc-num" id="fc${i}kg" data-i="${i}" data-k="kg" value="${esc(t.kg ?? "")}" inputmode="decimal" placeholder="—" aria-label="Peso por caixa tipo ${letter(i)}"></td>
-      <td style="text-align:center"><input type="checkbox" id="fc${i}st" data-i="${i}" data-k="st" ${t.st !== false ? "checked" : ""} aria-label="Tipo ${letter(i)} aceita carga em cima"></td>
-      <td><button type="button" class="btn-remove" data-del="${i}" aria-label="Remover tipo ${letter(i)}">×</button></td>
+      <td><span class="fc-chip" style="background:${corT(i)}">${tag(i)}</span></td>
+      <td class="q"><input class="fc-num" id="fc${i}q" data-i="${i}" data-k="q" value="${esc(t.q)}" inputmode="numeric" aria-label="Quantidade tipo ${tag(i)}"></td>
+      <td class="d"><input class="fc-num" id="fc${i}l" data-i="${i}" data-k="l" value="${esc(t.l)}" inputmode="decimal" aria-label="Comprimento tipo ${tag(i)}"></td>
+      <td class="d"><input class="fc-num" id="fc${i}w" data-i="${i}" data-k="w" value="${esc(t.w)}" inputmode="decimal" aria-label="Largura tipo ${tag(i)}"></td>
+      <td class="d"><input class="fc-num" id="fc${i}h" data-i="${i}" data-k="h" value="${esc(t.h)}" inputmode="decimal" aria-label="Altura tipo ${tag(i)}"></td>
+      <td class="k"><input class="fc-num" id="fc${i}kg" data-i="${i}" data-k="kg" value="${esc(t.kg ?? "")}" inputmode="decimal" placeholder="—" aria-label="Peso por caixa tipo ${tag(i)}"></td>
+      <td style="text-align:center"><input type="checkbox" id="fc${i}st" data-i="${i}" data-k="st" ${t.st !== false ? "checked" : ""} aria-label="Tipo ${tag(i)} aceita carga em cima"></td>
+      <td><button type="button" class="btn-remove" data-del="${i}" aria-label="Remover tipo ${tag(i)}">×</button></td>
     </tr>`).join("");
     cargoSummary();
   }
@@ -121,7 +132,9 @@
     if (/peso|kg/.test(s)) return "kg";
     return null;
   }
-  function parseList(txt) {
+  /** manterOrdem (ordem de chegada): cada linha colada vira uma linha da carga, na mesma
+   * ordem — só junta com a linha imediatamente anterior se for a mesma caixa. */
+  function parseList(txt, manterOrdem) {
     const out = [];
     const N = "(\\d+(?:[.,]\\d+)?)";
     const reXpto = new RegExp(`(\\d+)[^\\d]*?${N}\\s*(?:cm|mm|m)?\\s*[x×X*]\\s*${N}\\s*(?:cm|mm|m)?\\s*[x×X*]\\s*${N}`);
@@ -133,7 +146,8 @@
       else if (d.every((x) => x < 10)) d = d.map((x) => x * 100);
       const n = { q: t.q, l: +d[0].toFixed(1), w: +d[1].toFixed(1), h: +d[2].toFixed(1), kg: t.kg || "", st: true };
       // mesma medida (e peso) em linhas diferentes = mesmo tipo de caixa: soma a quantidade
-      const igual = out.find((o) => o.l === n.l && o.w === n.w && o.h === n.h && String(o.kg) === String(n.kg));
+      const mesma = (o) => o && o.l === n.l && o.w === n.w && o.h === n.h && String(o.kg) === String(n.kg);
+      const igual = manterOrdem ? (mesma(out[out.length - 1]) ? out[out.length - 1] : null) : out.find(mesma);
       if (igual) igual.q += n.q; else out.push(n);
     };
     txt.split(/\r?\n/).forEach((line) => {
@@ -165,11 +179,11 @@
   }
   $("fcBtnPaste").addEventListener("click", () => { const b = $("fcPasteBox"); b.hidden = !b.hidden; if (!b.hidden) $("fcPasteText").focus(); });
   function doImport(replace) {
-    const r = parseList($("fcPasteText").value);
+    const r = parseList($("fcPasteText").value, modoChegada());
     if (!r.length) { $("fcPasteMsg").textContent = "Nenhuma linha reconhecida. Cole a tabela com o cabeçalho (Qtd, Comp, Larg, Alt — em qualquer ordem; sem Qtd, cada linha vale 1 caixa) ou use “15 caixas com 146x82x96 cm”."; return; }
     S.types = replace ? r : S.types.concat(r); renderTypes(); save();
     const vols = r.reduce((t, x) => t + x.q, 0);
-    $("fcPasteMsg").textContent = `${vols} volume(s) importado(s) em ${r.length} tipo(s).`;
+    $("fcPasteMsg").textContent = `${vols} volume(s) importado(s) em ${r.length} ${modoChegada() ? "linha(s), na ordem de chegada" : "tipo(s)"}.`;
   }
   $("fcBtnImport").addEventListener("click", () => doImport(true));
   $("fcBtnAppend").addEventListener("click", () => doImport(false));
@@ -219,7 +233,9 @@
           const dk = it.ti * 8 + oi;
           if (p.dead && p.dead.has(dk)) continue;
           const k = rule(p, r); if (bk && cmp(k, bk) >= 0) continue;
-          if (collide(P, p, r)) { (p.dead || (p.dead = new Set())).add(dk); continue; }
+          // Ordem de chegada: além do lugar livre, o caminho até a porta tem que estar livre
+          // (a caixa entra pela traseira; não dá pra pôr atrás de uma já carregada).
+          if (collide(P, p, o.acesso ? { l: C.L - p.x, w: r.w, h: r.h } : r)) { (p.dead || (p.dead = new Set())).add(dk); continue; }
           if (p.z > EPS && !supported(P, p, r, o)) continue;
           best = { p, r }; bk = k;
         }
@@ -272,8 +288,23 @@
     }
     return best;
   }
+  /** Ordem de chegada: as caixas entram exatamente na ordem das linhas, sem reordenar.
+   * Só varia a regra de onde encaixar cada uma; fica a que perde menos espaço. */
+  function solveChegada(C, items, o) {
+    let best = null, bs = null;
+    const oa = Object.assign({}, o, { acesso: true });
+    for (const rule of RULES) {
+      const r = pack(C, items, oa, rule);
+      const used = r.placed.reduce((m, b) => Math.max(m, b.x + b.d.l), 0);
+      const sc = [r.un.length, r.un.reduce((t, i) => t + vol(i), 0), used];
+      if (!bs || cmp(sc, bs) < 0) { best = r; bs = sc; }
+    }
+    best.chegada = true;
+    return best;
+  }
   /** Níveis (piso = 1) e ordem de carregamento: da cabine para as portas, e nenhuma
-   * caixa antes das que a sustentam. */
+   * caixa antes das que a sustentam. Na ordem de chegada a sequência é a própria ordem
+   * em que as caixas foram encaixadas. */
   function finalize(res) {
     const P = res.placed;
     P.forEach((b) => { b.sup = []; });
@@ -286,8 +317,8 @@
       }
     }
     P.slice().sort((a, b) => a.z - b.z).forEach((b) => { b.level = b.sup.length ? 1 + Math.max(...b.sup.map((s) => s.level)) : 1; });
-    const done = new Set(), order = [];
-    let rest = P.slice();
+    const done = new Set(), order = res.chegada ? P.slice() : [];
+    let rest = res.chegada ? [] : P.slice();
     while (rest.length) {
       let pick = null;
       for (const b of rest) { if (b.sup.every((s) => done.has(s)) && (!pick || cmp([b.x, b.z, b.y], [pick.x, pick.z, pick.y]) < 0)) pick = b; }
@@ -318,15 +349,23 @@
     for (let ti = 0; ti < S.types.length; ti++) {
       const t = S.types[ti]; const q = Math.round(num(t.q)), l = num(t.l), w = num(t.w), h = num(t.h), kg = num(t.kg);
       if (!(q > 0)) continue;
-      if (!(l > 0 && w > 0 && h > 0)) return bad(`O tipo ${letter(ti)} está sem medida válida. Preencha C, L e A em centímetros.`);
-      if (q > 2000) return bad(`O tipo ${letter(ti)} tem ${q} volumes; o limite é 2000 por tipo.`);
+      if (!(l > 0 && w > 0 && h > 0)) return bad(`O tipo ${tag(ti)} está sem medida válida. Preencha C, L e A em centímetros.`);
+      if (q > 2000) return bad(`O tipo ${tag(ti)} tem ${q} volumes; o limite é 2000 por tipo.`);
       for (let k = 0; k < q; k++) items.push({ ti, l, w, h, kg: kg > 0 ? kg : 0, st: t.st !== false });
     }
     if (!items.length) return bad("Adicione pelo menos um tipo de caixa com quantidade maior que zero.");
     $("fcResults").classList.add("fc-busy");
     setVerdict("warn", "Calculando…", `Testando arranjos para ${items.length} volumes.`);
     setTimeout(() => {
-      R = finalize(solve(C, items, o)); R.items = items;
+      if (modoChegada()) {
+        R = finalize(solveChegada(C, items, o));
+        // referência: o mesmo lote arrumado com todas as caixas disponíveis de uma vez
+        const ref = solve(C, items, o);
+        R.ref = { un: ref.un.length, used: ref.placed.reduce((m, b) => Math.max(m, b.x + b.d.l), 0) };
+      } else {
+        R = finalize(solve(C, items, o));
+      }
+      R.items = items;
       $("fcResults").classList.remove("fc-busy");
       renderAll();
     }, 30);
@@ -347,15 +386,27 @@
     const compUtil = C.perda > 0 ? `${fmt(C.Lu / 100)} m úteis (${fmt(C.L / 100)} m menos ${fmt(C.perda, 1)}% de perda)` : `${fmt(C.L / 100)} m de comprimento`;
     const kgTot = items.reduce((t, i) => t + i.kg, 0), kgIn = P.reduce((t, b) => t + b.it.kg, 0);
     const overKg = C.cap > 0 && kgTot > C.cap;
+    // Ordem de chegada: quanto se perde por carregar linha a linha, contra ter tudo junto
+    let txtChegada = "";
+    if (R.chegada && R.ref) {
+      if (R.ref.un < un.length) {
+        txtChegada = ` <br>Com todas as caixas disponíveis juntas ficariam ${R.ref.un ? R.ref.un + " de fora" : "todas dentro"} (usando ${fmt(R.ref.used / 100)} m) — a ordem de chegada deixa <b>${un.length - R.ref.un} volume(s) a mais</b> de fora.`;
+      } else {
+        const dif = used - R.ref.used;
+        txtChegada = dif > 1
+          ? ` <br>Na ordem de chegada a carga ocupa <b>${fmt(dif / 100)} m a mais</b> (${fmt(dif / R.ref.used * 100, 0)}%) do que se todas as caixas estivessem disponíveis juntas (${fmt(R.ref.used / 100)} m).`
+          : ` <br>Carregar na ordem de chegada não perde espaço em relação a ter tudo junto (${fmt(R.ref.used / 100)} m).`;
+      }
+    }
     if (!un.length && !overKg) {
-      setVerdict("ok", "Toda a carga entra no baú", `Ocupa <b>${fmt(used / 100)} m</b> dos ${compUtil} — sobram <b>${fmt((C.Lu - used) / 100)} m</b> livres junto às portas. Siga a sequência abaixo: da cabine para as portas, de baixo para cima.`);
+      setVerdict("ok", "Toda a carga entra no baú", `Ocupa <b>${fmt(used / 100)} m</b> dos ${compUtil} — sobram <b>${fmt((C.Lu - used) / 100)} m</b> livres junto às portas. ${R.chegada ? "Siga a sequência abaixo, na ordem em que as linhas chegam." : "Siga a sequência abaixo: da cabine para as portas, de baixo para cima."}${txtChegada}`);
     } else if (!un.length && overKg) {
       setVerdict("warn", "Cabe no espaço, mas passa do peso", `A carga soma ${fmt0(kgTot)} kg para ${fmt0(C.cap)} kg de capacidade (${fmt0(kgTot - C.cap)} kg acima).`);
     } else {
       const byT = {}; un.forEach((i) => (byT[i.ti] = (byT[i.ti] || 0) + 1));
-      const list = Object.entries(byT).map(([t, n]) => `${n} × tipo ${letter(+t)}`).join(", ");
+      const list = Object.entries(byT).map(([t, n]) => `${n} × tipo ${tag(+t)}`).join(", ");
       const why = vTot > vBox ? ` O volume da carga (${fmt(vTot)} m³) já passa o volume do baú (${fmt(vBox)} m³).` : "";
-      setVerdict("bad", `${un.length} volume${un.length > 1 ? "s ficaram" : " ficou"} de fora`, `Não couberam: ${list}.${why} Tente permitir deitar caixas, reduzir o apoio mínimo${C.perda > 0 ? ", reduzir a perda de espaço" : ""} ou usar um baú maior.`);
+      setVerdict("bad", `${un.length} volume${un.length > 1 ? "s ficaram" : " ficou"} de fora`, `Não couberam: ${list}.${why} Tente permitir deitar caixas, reduzir o apoio mínimo${C.perda > 0 ? ", reduzir a perda de espaço" : ""} ou usar um baú maior.${txtChegada}`);
     }
     const m = [
       { v: `${fmt(used / 100)} m`, s: `comprimento usado de ${fmt((C.perda > 0 ? C.Lu : C.L) / 100)} m${C.perda > 0 ? " úteis" : ""}`, p: used / C.Lu },
@@ -363,11 +414,15 @@
       { v: `${P.length}/${items.length}`, s: "volumes carregados", p: P.length / items.length },
       { v: `${fmt(maxH / 100)} m`, s: `altura máxima de ${fmt(C.H / 100)} m`, p: maxH / C.H },
     ];
+    if (R.chegada && R.ref && R.ref.un === un.length) {
+      const dif = Math.max(0, used - R.ref.used);
+      m.push({ v: `+${fmt(dif / 100)} m`, s: `perda pela ordem de chegada (tudo junto: ${fmt(R.ref.used / 100)} m)`, p: null });
+    }
     if (kgTot) m.push({ v: `${fmt0(kgIn)} kg`, s: C.cap > 0 ? `de ${fmt0(C.cap)} kg de capacidade` : "peso carregado", p: C.cap > 0 ? kgIn / C.cap : null });
     $("fcMetrics").innerHTML = m.map((x) => `<div class="fc-metric"><b>${x.v}</b><span>${x.s}</span>${x.p != null ? `<div class="fc-bar"><i style="width:${Math.min(100, x.p * 100).toFixed(1)}%;${x.p > 1 ? "background:#c0392b" : ""}"></i></div>` : ""}</div>`).join("");
 
     const porTipo = S.types.map((t, i) => ({ i, n: P.filter((b) => b.it.ti === i).length, q: items.filter((it) => it.ti === i).length })).filter((x) => x.q);
-    $("fcLegend").innerHTML = porTipo.map((x) => { const t = S.types[x.i]; return `<span><span class="fc-chip" style="background:${color(x.i)}">${letter(x.i)}</span>${num(t.l)}×${num(t.w)}×${num(t.h)} · ${x.n}/${x.q}</span>`; }).join("");
+    $("fcLegend").innerHTML = porTipo.map((x) => { const t = S.types[x.i]; return `<span><span class="fc-chip" style="background:${corT(x.i)}">${tag(x.i)}</span>${num(t.l)}×${num(t.w)}×${num(t.h)} · ${x.n}/${x.q}</span>`; }).join("");
 
     const maxL = P.reduce((mx, b) => Math.max(mx, b.level), 0);
     const tabs = [`<button type="button" class="btn-secondary" data-l="0" aria-pressed="true">Todos os níveis</button>`];
@@ -377,9 +432,10 @@
     renderSeq();
     drawPiles();
     build3D();
+    $("fcSLinPrev").hidden = $("fcSLinNext").hidden = !R.chegada;
     setStep(P.length);
     $("fcLeftOut").innerHTML = un.length
-      ? `<p class="hint" style="color:#c0392b;margin:10px 0 0"><b>Ficaram de fora:</b></p><ul class="fc-out">${Object.entries(un.reduce((a, i) => ((a[i.ti] = (a[i.ti] || 0) + 1), a), {})).map(([t, n]) => { const x = S.types[t]; return `<li>${n} × tipo ${letter(+t)} (${num(x.l)}×${num(x.w)}×${num(x.h)} cm)</li>`; }).join("")}</ul>`
+      ? `<p class="hint" style="color:#c0392b;margin:10px 0 0"><b>Ficaram de fora:</b></p><ul class="fc-out">${Object.entries(un.reduce((a, i) => ((a[i.ti] = (a[i.ti] || 0) + 1), a), {})).map(([t, n]) => { const x = S.types[t]; return `<li>${n} × tipo ${tag(+t)} (${num(x.l)}×${num(x.w)}×${num(x.h)} cm)</li>`; }).join("")}</ul>`
       : "";
   }
 
@@ -398,7 +454,7 @@
     return s;
   }
   function lbl(b, wd, ht, x, y) {
-    const txt = `${b.tIdx}/${b.tTotal} - ${letter(b.it.ti)}`;
+    const txt = `${b.tIdx}/${b.tTotal} - ${tag(b.it.ti)}`;
     const fs = Math.min(18, (wd * 1.55) / txt.length, ht * 0.4);
     return fs >= 6 ? `<text class="fc-lb" x="${x + wd / 2}" y="${y + ht / 2}" font-size="${fs.toFixed(1)}">${txt}</text>` : "";
   }
@@ -407,7 +463,7 @@
     let s = `<svg class="fc-plan" viewBox="-4 -4 ${C.L + 8} ${C.W + 36}" role="img" aria-label="Mapa de carga visto de cima"><rect class="fc-bed" x="0" y="0" width="${C.L}" height="${C.W}"/>${ruler(C.L, 0, C.W)}`;
     for (const b of P) {
       const x = b.x, y = C.W - (b.y + b.d.w);
-      s += `<rect class="fc-bx${b.seq === curSeq ? " fc-hi" : ""}" x="${x}" y="${y}" width="${b.d.l}" height="${b.d.w}" fill="${color(b.it.ti)}"/>` + lbl(b, b.d.l, b.d.w, x, y);
+      s += `<rect class="fc-bx${b.seq === curSeq ? " fc-hi" : ""}" x="${x}" y="${y}" width="${b.d.l}" height="${b.d.w}" fill="${corT(b.it.ti)}"/>` + lbl(b, b.d.l, b.d.w, x, y);
     }
     $("fcTopSvg").innerHTML = s + "</svg>";
   }
@@ -416,7 +472,7 @@
     let s = `<svg class="fc-plan" viewBox="-4 -4 ${C.L + 8} ${C.H + 36}" role="img" aria-label="Vista lateral da carga"><rect class="fc-bed" x="0" y="0" width="${C.L}" height="${C.H}"/>${ruler(C.L, 0, C.H)}`;
     for (const b of P) {
       const x = b.x, y = C.H - (b.z + b.d.h);
-      s += `<rect class="fc-bx${b.seq === curSeq ? " fc-hi" : ""}" x="${x}" y="${y}" width="${b.d.l}" height="${b.d.h}" fill="${color(b.it.ti)}"/>` + lbl(b, b.d.l, b.d.h, x, y);
+      s += `<rect class="fc-bx${b.seq === curSeq ? " fc-hi" : ""}" x="${x}" y="${y}" width="${b.d.l}" height="${b.d.h}" fill="${corT(b.it.ti)}"/>` + lbl(b, b.d.l, b.d.h, x, y);
     }
     $("fcSideSvg").innerHTML = s + "</svg>";
   }
@@ -458,7 +514,7 @@
       let s = `<svg class="fc-plan fc-pile-svg" viewBox="-2 -2 ${C.W + 4} ${C.H + 4}" role="img" aria-label="Posição ${idx + 1}, vista de frente"><rect class="fc-bed" x="0" y="0" width="${C.W}" height="${C.H}"/>`;
       for (const b of boxes) {
         const x = C.W - (b.y + b.d.w), y = C.H - (b.z + b.d.h);
-        s += `<rect class="fc-bx" x="${x}" y="${y}" width="${b.d.w}" height="${b.d.h}" fill="${color(b.it.ti)}"/>` + lbl(b, b.d.w, b.d.h, x, y);
+        s += `<rect class="fc-bx" x="${x}" y="${y}" width="${b.d.w}" height="${b.d.h}" fill="${corT(b.it.ti)}"/>` + lbl(b, b.d.w, b.d.h, x, y);
       }
       s += "</svg>";
       return `<div class="fc-pile-item"><h4>Posição ${idx + 1} <span class="hint">(${fmt(xc / 100)} m da cabine)</span></h4>${s}</div>`;
@@ -470,7 +526,7 @@
       const it = b.it, d = b.d; const obs = [];
       if (d.h !== it.h) obs.push("deitada"); else if (d.l !== it.l) obs.push("girada 90°");
       if (b.sup.length) obs.push("sobre #" + b.sup.map((s) => s.seq).join(", #"));
-      return `<tr data-s="${b.seq}"><td>${b.seq}</td><td class="fc-etiqueta"><span class="fc-chip" style="background:${color(it.ti)};width:20px;height:20px;font-size:10.5px">${letter(it.ti)}</span><span>${b.tIdx}/${b.tTotal} - ${letter(it.ti)}</span></td>
+      return `<tr data-s="${b.seq}"><td>${b.seq}</td><td class="fc-etiqueta"><span class="fc-chip" style="background:${corT(it.ti)};width:20px;height:20px;font-size:10.5px">${tag(it.ti)}</span><span>${b.tIdx}/${b.tTotal} - ${tag(it.ti)}</span></td>
         <td>${d.l}×${d.w}×${d.h}</td><td>${fmt(b.x / 100)} m</td><td>${fmt(b.y / 100)} m</td><td>${fmt(b.z / 100)} m</td>
         <td><span class="fc-pill">${b.level === 1 ? "piso" : b.level + "º"}</span></td><td>${obs.join(" · ")}</td></tr>`;
     }).join("");
@@ -525,7 +581,7 @@
     const edgeM = new THREE.LineBasicMaterial({ color: 0x0e1518, transparent: true, opacity: 0.5 });
     for (const b of R.order) {
       const d = b.d, s = 0.996;
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(d.l / 100 * s, d.h / 100 * s, d.w / 100 * s), new THREE.MeshLambertMaterial({ color: new THREE.Color(color(b.it.ti)) }));
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(d.l / 100 * s, d.h / 100 * s, d.w / 100 * s), new THREE.MeshLambertMaterial({ color: new THREE.Color(corT(b.it.ti)) }));
       mesh.position.set(ox + (b.x + d.l / 2) / 100, (b.z + d.h / 2) / 100, -(oz + (b.y + d.w / 2) / 100));
       mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), edgeM));
       g.add(mesh); T.meshes.push(mesh);
@@ -545,7 +601,7 @@
     const b = R.order[n - 1];
     $("fcStepInfo").innerHTML = n === 0 ? "Baú vazio. Avance para ver cada caixa entrando."
       : n === N ? `Carga completa: <b>${N}</b> volumes.`
-      : `Passo <b>${n}</b> de ${N}: tipo <b>${letter(b.it.ti)}</b> (${b.d.l}×${b.d.w}×${b.d.h} cm) a <b>${fmt(b.x / 100)} m</b> da cabine, <b>${fmt(b.y / 100)} m</b> do lado esquerdo, ${b.z > 0 ? `em cima (base a ${fmt(b.z / 100)} m)` : "no piso"}.`;
+      : `Passo <b>${n}</b> de ${N}: ${R.chegada ? `linha <b>${tag(b.it.ti)}</b> (${b.tIdx}ª de ${b.tTotal} caixa${b.tTotal > 1 ? "s" : ""} da linha)` : `tipo <b>${tag(b.it.ti)}</b>`} (${b.d.l}×${b.d.w}×${b.d.h} cm) a <b>${fmt(b.x / 100)} m</b> da cabine, <b>${fmt(b.y / 100)} m</b> do lado esquerdo, ${b.z > 0 ? `em cima (base a ${fmt(b.z / 100)} m)` : "no piso"}.`;
     document.querySelectorAll("#fcSeqBody tr").forEach((tr) => tr.classList.toggle("fc-cur", +tr.dataset.s === curSeq));
     drawTop(); drawSide();
   }
@@ -555,6 +611,26 @@
   $("fcSPrev").addEventListener("click", () => { stopPlay(); setStep(+stepEl.value - 1); });
   $("fcSNext").addEventListener("click", () => { stopPlay(); setStep(+stepEl.value + 1); });
   $("fcSAll").addEventListener("click", () => { stopPlay(); setStep(R ? R.order.length : 0); });
+  // Ordem de chegada: pula direto para o fim da próxima/anterior linha (a carga até ali)
+  function fimDaLinha(dir) {
+    if (!R) return;
+    const O = R.order, n = +stepEl.value;
+    if (dir > 0) {
+      let i = n; // primeiro passo ainda não mostrado
+      if (i >= O.length) return;
+      const ti = O[i].it.ti;
+      while (i < O.length && O[i].it.ti === ti) i++;
+      setStep(i);
+    } else {
+      let i = n - 1; // última caixa mostrada
+      if (i < 0) return;
+      const ti = O[i].it.ti;
+      while (i >= 0 && O[i].it.ti === ti) i--;
+      setStep(i + 1);
+    }
+  }
+  $("fcSLinNext").addEventListener("click", () => { stopPlay(); fimDaLinha(1); });
+  $("fcSLinPrev").addEventListener("click", () => { stopPlay(); fimDaLinha(-1); });
   $("fcSPlay").addEventListener("click", () => {
     if (!R) return;
     if (playT) { stopPlay(); return; }

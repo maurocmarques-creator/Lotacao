@@ -762,6 +762,7 @@
           <div class="fc-checks">
             <label><input type="checkbox" id="fcStack"><span>Permitir empilhar<small>Caixas podem ir sobre outras (respeitando “aceita em cima”).</small></span></label>
             <label><input type="checkbox" id="fcTip"><span>Permitir deitar / tombar caixas<small>Desligado: a altura (A) fica sempre na vertical; só gira 90° no piso.</small></span></label>
+            <label><input type="checkbox" id="fcSeq"><span>Carregar na ordem de chegada (linha por linha)<small>Cada linha da carga entra na ordem em que foi informada, sem esperar as próximas — e nenhuma caixa vai para trás de outra já carregada. Mostra quanto espaço isso custa comparado a ter tudo junto. Cole a lista com esta opção ligada para manter a ordem das linhas.</small></span></label>
           </div>
           <div class="fc-row">
             <label>Apoio mínimo da base (%)<input id="fcSup" type="number" min="30" max="100" step="5"></label>
@@ -793,6 +794,8 @@
             <button type="button" id="fcSNext" class="btn-secondary" aria-label="Próximo passo">&#9654;</button>
             <button type="button" id="fcSPlay" class="btn-secondary">Reproduzir</button>
             <button type="button" id="fcSAll" class="btn-secondary">Tudo</button>
+            <button type="button" id="fcSLinPrev" class="btn-secondary" hidden>&#9664; Linha</button>
+            <button type="button" id="fcSLinNext" class="btn-secondary" hidden>Linha &#9654;</button>
           </div>
           <div class="fc-stepinfo" id="fcStepInfo"></div>
         </div>

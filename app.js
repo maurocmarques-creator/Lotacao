@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "09/11/2026 14:11";
+const BUILD_TIMESTAMP = "09/11/2026 14:29";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -2368,6 +2368,7 @@ function preencherSelectVendedor() {
     if (nomes.includes(atual)) sel.value = atual;
     $("vendedorAviso").textContent = "";
   }
+  preencherSelectVendedorCm();
 }
 
 $("btnAddVendedor").addEventListener("click", () => {
@@ -2403,18 +2404,19 @@ function renderHistorico() {
   lista.forEach((c) => {
     const tr = document.createElement("tr");
     tr.dataset.cotacaoId = c.id;
+    const manual = c.tipo === "manual";
     tr.innerHTML = `
-      <td>${c.numeroFormatado ? `<span class="numero-cotacao-link" data-dre-cotacao="${c.id}">${c.numeroFormatado}</span>` : "—"}</td>
+      <td>${manual ? `${c.numeroFormatado} <small>(manual)</small>` : c.numeroFormatado ? `<span class="numero-cotacao-link" data-dre-cotacao="${c.id}">${c.numeroFormatado}</span>` : "—"}</td>
       <td>${fmtDataHora(c.criadoEm)}</td>
       <td>${c.vendedor || "—"}</td>
       <td>${c.origem || "—"}</td>
       <td>${c.destino || "—"}</td>
-      <td>${fmtNum(c.km, 1)}</td>
+      <td>${manual ? "—" : fmtNum(c.km, 1)}</td>
       <td>${fmtBRL(c.pedagio)}</td>
       <td>${fmtBRL(c.valorMercadoria)}</td>
-      <td>${fmtBRL(c.totalAntt)}</td>
+      ${manual ? `<td colspan="3">Frete Total: <b>${fmtBRL(c.totalEfetivo)}</b></td>` : `<td>${fmtBRL(c.totalAntt)}</td>
       <td>${fmtBRL(c.totalMerc)}</td>
-      <td>${c.spotDisponivel ? fmtBRL(c.totalSpot) : "—"}</td>
+      <td>${c.spotDisponivel ? fmtBRL(c.totalSpot) : "—"}</td>`}
       <td><button type="button" class="btn-secondary btn-imprimir-cotacao" data-imprimir-cotacao="${c.id}" title="Imprimir cotação formal (PDF)">Imprimir</button></td>
       <td><button type="button" class="btn-remove" data-remove-cotacao="${c.id}" title="Remover">&times;</button></td>
     `;
@@ -2467,6 +2469,10 @@ function linhaCampo(rotulo, valor) {
 function abrirDetalheCotacao(id) {
   const c = historicoCotacoes.find((item) => item.id === id);
   if (!c) return;
+  if (c.tipo === "manual") {
+    abrirDetalheCotacaoManual(c);
+    return;
+  }
 
   // Cotações salvas antes desta atualização do histórico não têm os campos detalhados
   // (markup, ICMS, composição, fonte do KM/ANTT). Mostrar "0" ou "indefinido" nesse caso
@@ -3538,7 +3544,7 @@ function cmMontarColunas() {
         ${CM_CAMPOS_DRE.map(([k, r]) => `<label>${r}<input type="number" id="cm${p}${k}" min="0" step="0.01" placeholder="0,00"></label>`).join("")}
         <label>${rotuloImp} (%)<input type="number" id="cm${p}PctImp" min="0" step="0.01"></label>
         <label>% Custo Fixo<input type="number" id="cm${p}PctFixo" min="0" step="0.01"></label>
-        <label class="cm-check"><input type="checkbox" id="cm${p}ComOn"> Terá comissão</label>
+        <label class="cm-check"><input type="checkbox" id="cm${p}ComOn"> Terá comissão: <b id="cm${p}ComTxt">Não</b></label>
         <label>% Comissão<input type="number" id="cm${p}PctCom" min="0" step="0.01"></label>
       </div>
       <p class="sem-spot" id="cm${p}Vazio">Preencha o Frete Total para calcular.</p>
@@ -3625,12 +3631,13 @@ function cmCalcularCotacao() {
   } else {
     $("cmPctBox").hidden = true;
   }
-  return { total, icms };
+  return { total, icms, aliquota, fretePeso, seguro, pedagio, mercadoria };
 }
 
 /** Monta o DRE de um lado (L ou S) a partir dos campos dele. Devolve o DRE ou null. */
 function cmRenderDre(p, rotuloImposto) {
   const v = (k) => parseFloat(cmCampo(p, k).value) || 0;
+  $(`cm${p}ComTxt`).textContent = cmCampo(p, "ComOn").checked ? "Sim" : "Não";
   const frete = v("frete");
   if (!frete) {
     $(`cm${p}Tabela`).innerHTML = "";
@@ -3664,8 +3671,20 @@ function cmRenderDre(p, rotuloImposto) {
   return d;
 }
 
+let cmUltimaCotacao = null;
+let cmUltimoDre = { L: null, S: null };
+let cmSalvoId = null;
+
+/** Qualquer mudança nos campos invalida o "salvo": o PDF só sai da cotação já salva. */
+function cmMarcarAlterado() {
+  cmSalvoId = null;
+  $("cmBtnSalvar").disabled = false;
+  $("cmBtnImprimir").disabled = true;
+}
+
 function cmRecalcular() {
   const quote = cmCalcularCotacao();
+  cmUltimaCotacao = quote;
   // Cotação -> lado Lucro Presumido (só o que o usuário não editou)
   cmSetAuto("L", "frete", quote ? quote.total : "");
   cmSetAuto("L", "icms", quote ? quote.icms : "");
@@ -3677,6 +3696,8 @@ function cmRecalcular() {
 
   const dL = cmRenderDre("L", "Impostos Federais");
   const dS = cmRenderDre("S", "Simples Nacional");
+  cmUltimoDre = { L: dL, S: dS };
+  cmMarcarAlterado();
 
   const box = $("cmComparaBox");
   if (dL && dS) {
@@ -3702,6 +3723,113 @@ $("cmVeiculo").addEventListener("change", cmRecalcular);
     });
   });
 });
+
+function preencherSelectVendedorCm() {
+  const sel = $("cmVendedor");
+  const atual = sel.value;
+  const nomes = vendedoresTable.map((v) => v.nome).filter(Boolean);
+  sel.innerHTML = nomes.length ? nomes.map((n) => `<option value="${n}">${n}</option>`).join("") : `<option value="">Nenhum vendedor cadastrado</option>`;
+  if (nomes.includes(atual)) sel.value = atual;
+}
+$("cmVendedor").addEventListener("change", cmMarcarAlterado);
+
+/** Salva a cotação manual no Histórico (mesmo número sequencial da Lotação) e libera o PDF. */
+async function cmSalvar() {
+  const q = cmUltimaCotacao;
+  const msg = (t) => ($("cmMsgSalvar").textContent = t);
+  if (!q) {
+    msg("Preencha Origem, Destino e o Frete Peso antes de salvar.");
+    return;
+  }
+  $("cmBtnSalvar").disabled = true;
+  msg("Salvando...");
+  const agora = new Date();
+  const ano = agora.getFullYear();
+  let numero;
+  try {
+    numero = await proximoNumeroCotacao(ano);
+  } catch (e) {
+    msg("Erro ao salvar: não foi possível gerar o número da cotação.");
+    $("cmBtnSalvar").disabled = false;
+    return;
+  }
+
+  const chavesDre = [...CM_CAMPOS_DRE.map(([k]) => k), "PctImp", "PctFixo", "PctCom"];
+  const lado = (p) => ({
+    entradas: Object.fromEntries(chavesDre.map((k) => [k, parseFloat(cmCampo(p, k).value) || 0])),
+    comissao: cmCampo(p, "ComOn").checked,
+    dre: cmUltimoDre[p],
+  });
+  const registro = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    numero,
+    ano,
+    numeroFormatado: `${numero}/${ano}`,
+    criadoEm: agora.toISOString(),
+    vendedor: $("cmVendedor").value || "",
+    tipo: "manual",
+    origem: $("cmOrigem").value.trim(),
+    destino: $("cmDestino").value.trim(),
+    ufOrigem: cmUfOrigem,
+    ufDestino: cmUfDestino,
+    tipoVeiculoMercado: $("cmVeiculo").value || "",
+    valorMercadoria: q.mercadoria,
+    pedagio: q.pedagio,
+    advalorem: q.seguro,
+    aliquotaIcms: q.aliquota,
+    fretePesoEfetivo: q.fretePeso,
+    icmsEfetivo: q.icms,
+    totalEfetivo: q.total,
+    dreManual: { L: lado("L"), S: lado("S") },
+  };
+
+  historicoCotacoes.push(registro);
+  renderHistorico();
+  await inserirCotacao(registro);
+  cmSalvoId = registro.id;
+  $("cmBtnImprimir").disabled = false;
+  msg(`Cotação nº ${registro.numeroFormatado} salva no histórico.`);
+}
+$("cmBtnSalvar").addEventListener("click", cmSalvar);
+$("cmBtnImprimir").addEventListener("click", () => {
+  if (cmSalvoId) imprimirCotacao(cmSalvoId);
+});
+
+function abrirDetalheCotacaoManual(c) {
+  const dreLinhas = (rotulo, bloco) => {
+    const d = bloco && bloco.dre;
+    if (!d) return [];
+    return [
+      linhaSecao(rotulo),
+      linhaCampo("Frete Total", fmtBRL(d.freteTotal)),
+      linhaCampo("Custo da Contratação", fmtBRL(d.custoContratacao)),
+      linhaCampo("Comissão", fmtBRL(d.comissao)),
+      linhaCampo("Resultado", fmtBRL(d.resultado)),
+      linhaCampo("Resultado % do faturamento", `${fmtNum(d.resultadoPct, 2)}%`),
+    ];
+  };
+  const dre = c.dreManual || {};
+  const partes = [
+    linhaSecao("Cotação manual"),
+    linhaCampo("Nº Cotação", c.numeroFormatado || "—"),
+    linhaCampo("Data/Hora", fmtDataHora(c.criadoEm)),
+    linhaCampo("Vendedor", c.vendedor || "—"),
+    linhaCampo("Origem", c.origem || "—"),
+    linhaCampo("Destino", c.destino || "—"),
+    linhaCampo("Veículo", c.tipoVeiculoMercado || "—"),
+    linhaCampo("Valor da Mercadoria", fmtBRL(c.valorMercadoria)),
+    linhaSecao("Valores"),
+    linhaCampo("Frete Peso", fmtBRL(c.fretePesoEfetivo)),
+    linhaCampo("Seguro", fmtBRL(c.advalorem)),
+    linhaCampo("Pedágio", fmtBRL(c.pedagio)),
+    linhaCampo(`ICMS (${fmtNum(c.aliquotaIcms, 2)}%)`, fmtBRL(c.icmsEfetivo)),
+    linhaCampo("Frete Total", fmtBRL(c.totalEfetivo)),
+    ...dreLinhas("DRE — Lucro Presumido", dre.L),
+    ...dreLinhas("DRE — Simples Nacional", dre.S),
+  ];
+  $("detalheCotacaoTabela").innerHTML = partes.join("");
+  $("detalheCotacaoOverlay").hidden = false;
+}
 
 /* ============================================================
    Init — busca os dados no banco compartilhado ANTES de renderizar

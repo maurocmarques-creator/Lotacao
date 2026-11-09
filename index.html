@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calculadora de Frete</title>
-<link rel="stylesheet" href="style.css?v=202611091411">
-<link rel="stylesheet" href="carga.css?v=202611091411">
+<link rel="stylesheet" href="style.css?v=202611091429">
+<link rel="stylesheet" href="carga.css?v=202611091429">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -407,6 +407,22 @@
       <div class="result-box dre-manual-pct" id="cmComparaBox" hidden>
         <span class="result-label" id="cmComparaTexto"></span>
         <span class="result-value" id="cmComparaValor"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Salvar e gerar PDF</h2>
+      <p class="hint">
+        Salva a cotação no Histórico (com o DRE dos dois regimes) usando o próximo número da
+        sequência, e libera o PDF da cotação formal. Se mudar qualquer campo depois, salve de novo.
+      </p>
+      <label class="campo-largo">Vendedor
+        <select id="cmVendedor"></select>
+      </label>
+      <div class="cm-botoes">
+        <button type="button" id="cmBtnSalvar" class="btn-primary">Salvar cotação</button>
+        <button type="button" id="cmBtnImprimir" class="btn-secondary" disabled>Imprimir / PDF</button>
+        <span class="save-msg" id="cmMsgSalvar"></span>
       </div>
     </div>
   </section>
@@ -960,9 +976,9 @@
   <p>Dados compartilhados entre todos os acessos &middot; distância via OpenStreetMap/OSRM, OpenRouteService ou QualP</p>
 </footer>
 
-<script src="app.js?v=202611091411"></script>
+<script src="app.js?v=202611091429"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="carga.js?v=202611091411"></script>
+<script src="carga.js?v=202611091429"></script>
 </body>
 </html>

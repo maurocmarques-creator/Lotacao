@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calculadora de Frete</title>
-<link rel="stylesheet" href="style.css?v=202611091438">
-<link rel="stylesheet" href="carga.css?v=202611091438">
+<link rel="stylesheet" href="style.css?v=202611091444">
+<link rel="stylesheet" href="carga.css?v=202611091444">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -345,6 +345,7 @@
   <section id="tab-cotacaoManual" class="tab-panel">
     <div class="card">
       <h2>Cotação Manual</h2>
+      <p class="hint save-msg" id="cmEditandoAviso" hidden></p>
       <p class="hint">
         Digite os valores da cotação: o ICMS vem da alíquota cadastrada para a Origem/Destino e é
         calculado “por dentro” (o imposto entra na base). O Frete Total alimenta o DRE abaixo.
@@ -422,6 +423,7 @@
       <div class="cm-botoes">
         <button type="button" id="cmBtnSalvar" class="btn-primary">Salvar cotação</button>
         <button type="button" id="cmBtnImprimir" class="btn-secondary" disabled>Imprimir / PDF</button>
+        <button type="button" id="cmBtnNova" class="btn-secondary" hidden>Nova cotação (limpar)</button>
         <span class="save-msg" id="cmMsgSalvar"></span>
       </div>
     </div>
@@ -953,6 +955,7 @@
       <div style="margin-top: 14px;">
         <button type="button" id="btnVoltarHistorico" class="btn-secondary">&larr; Voltar ao Histórico</button>
         <button type="button" id="btnExportarDreExcel" class="btn-primary">Exportar para Excel</button>
+        <button type="button" id="btnEditarCotacaoManual" class="btn-primary" hidden>Editar cotação</button>
         <span class="save-msg" id="msgDreExcel"></span>
       </div>
     </div>
@@ -983,9 +986,9 @@
   <p>Dados compartilhados entre todos os acessos &middot; distância via OpenStreetMap/OSRM, OpenRouteService ou QualP</p>
 </footer>
 
-<script src="app.js?v=202611091438"></script>
+<script src="app.js?v=202611091444"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="carga.js?v=202611091438"></script>
+<script src="carga.js?v=202611091444"></script>
 </body>
 </html>

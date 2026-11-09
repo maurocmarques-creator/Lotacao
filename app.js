@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "09/11/2026 14:38";
+const BUILD_TIMESTAMP = "09/11/2026 14:44";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -98,6 +98,15 @@ async function inserirCotacao(registro) {
     .from("historico_cotacoes")
     .insert({ id: registro.id, numero_formatado: registro.numeroFormatado, criado_em: registro.criadoEm, data: registro });
   if (error) console.error("Falha ao salvar cotação no banco:", error);
+}
+/** Atualiza uma cotação já salva (mesmo id e número). Tenta UPDATE; se o banco não deixar
+    (sem permissão, nenhuma linha afetada), recria a linha com o mesmo id (apagar + inserir). */
+async function atualizarCotacao(registro) {
+  const { data, error } = await db.from("historico_cotacoes").update({ data: registro }).eq("id", registro.id).select();
+  if (!error && data && data.length) return;
+  const del = await db.from("historico_cotacoes").delete().eq("id", registro.id);
+  if (del.error) console.error("Falha ao atualizar cotação (apagar):", del.error);
+  await inserirCotacao(registro);
 }
 /** Remove uma cotação do histórico compartilhado. */
 async function removerCotacao(id) {
@@ -2417,7 +2426,7 @@ function renderHistorico() {
       ${manual ? `<td colspan="3">Frete Total: <b>${fmtBRL(c.totalEfetivo)}</b></td>` : `<td>${fmtBRL(c.totalAntt)}</td>
       <td>${fmtBRL(c.totalMerc)}</td>
       <td>${c.spotDisponivel ? fmtBRL(c.totalSpot) : "—"}</td>`}
-      <td><button type="button" class="btn-secondary btn-imprimir-cotacao" data-imprimir-cotacao="${c.id}" title="Imprimir cotação formal (PDF)">Imprimir</button></td>
+      <td><button type="button" class="btn-secondary btn-imprimir-cotacao" data-imprimir-cotacao="${c.id}" title="Imprimir cotação formal (PDF)">Imprimir</button>${manual ? ` <button type="button" class="btn-secondary btn-imprimir-cotacao" data-editar-cotacao="${c.id}" title="Voltar para a Cotação Manual para corrigir e atualizar">Editar</button>` : ""}</td>
       <td><button type="button" class="btn-remove" data-remove-cotacao="${c.id}" title="Remover">&times;</button></td>
     `;
     tbody.appendChild(tr);
@@ -2427,6 +2436,13 @@ function renderHistorico() {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       imprimirCotacao(btn.dataset.imprimirCotacao);
+    });
+  });
+
+  tbody.querySelectorAll("[data-editar-cotacao]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      cmCarregar(btn.dataset.editarCotacao);
     });
   });
 
@@ -2724,6 +2740,7 @@ function abrirDreProjetado(id) {
   // volta ao layout de uma coluna (a cotação manual usa as duas colunas)
   $("dreSingleBox").hidden = false;
   $("dreManualLadoALado").hidden = true;
+  $("btnEditarCotacaoManual").hidden = true;
 
   dreAtualCotacaoId = id;
   $("dreNumeroCotacao").textContent = `— Cotação Nº ${c.numeroFormatado}`;
@@ -2762,6 +2779,7 @@ function abrirDreProjetado(id) {
 }
 
 $("btnVoltarHistorico").addEventListener("click", () => ativarAba("historico"));
+$("btnEditarCotacaoManual").addEventListener("click", () => cmCarregar(dreAtualCotacaoId));
 
 /* ============================================================
    Cotação formal (impressão / PDF) — usa o Total "Efetivo", o mesmo do DRE Projetado
@@ -3692,6 +3710,7 @@ function abrirDreManualSalvo(c) {
   $("dreSingleBox").hidden = true;
   $("dreManualLadoALado").hidden = false;
   $("btnExportarDreExcel").hidden = true;
+  $("btnEditarCotacaoManual").hidden = false;
 
   const dre = c.dreManual || {};
   const coluna = (titulo, bloco, rotuloImposto) => {
@@ -3788,14 +3807,20 @@ async function cmSalvar() {
   $("cmBtnSalvar").disabled = true;
   msg("Salvando...");
   const agora = new Date();
-  const ano = agora.getFullYear();
+  const editando = cmEditandoId ? historicoCotacoes.find((c) => c.id === cmEditandoId) : null;
+  let ano = agora.getFullYear();
   let numero;
-  try {
-    numero = await proximoNumeroCotacao(ano);
-  } catch (e) {
-    msg("Erro ao salvar: não foi possível gerar o número da cotação.");
-    $("cmBtnSalvar").disabled = false;
-    return;
+  if (editando) {
+    // editar mantém o número (e a data de criação): só atualiza os dados
+    ({ numero, ano } = editando);
+  } else {
+    try {
+      numero = await proximoNumeroCotacao(ano);
+    } catch (e) {
+      msg("Erro ao salvar: não foi possível gerar o número da cotação.");
+      $("cmBtnSalvar").disabled = false;
+      return;
+    }
   }
 
   const chavesDre = [...CM_CAMPOS_DRE.map(([k]) => k), "PctImp", "PctFixo", "PctCom"];
@@ -3805,11 +3830,12 @@ async function cmSalvar() {
     dre: cmUltimoDre[p],
   });
   const registro = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: editando ? editando.id : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     numero,
     ano,
     numeroFormatado: `${numero}/${ano}`,
-    criadoEm: agora.toISOString(),
+    criadoEm: editando ? editando.criadoEm : agora.toISOString(),
+    ...(editando ? { atualizadoEm: agora.toISOString() } : {}),
     vendedor: $("cmVendedor").value || "",
     tipo: "manual",
     origem: $("cmOrigem").value.trim(),
@@ -3827,15 +3853,93 @@ async function cmSalvar() {
     dreManual: { L: lado("L"), S: lado("S") },
   };
 
-  historicoCotacoes.push(registro);
-  renderHistorico();
-  await inserirCotacao(registro);
+  if (editando) {
+    historicoCotacoes[historicoCotacoes.indexOf(editando)] = registro;
+    renderHistorico();
+    await atualizarCotacao(registro);
+  } else {
+    historicoCotacoes.push(registro);
+    renderHistorico();
+    await inserirCotacao(registro);
+  }
   cmSalvoId = registro.id;
+  cmEditandoId = registro.id; // continua editando a mesma cotação se salvar de novo
+  cmAtualizarBotaoSalvar();
   $("cmBtnImprimir").disabled = false;
-  msg(`Cotação nº ${registro.numeroFormatado} salva no histórico.`);
+  msg(`Cotação nº ${registro.numeroFormatado} ${editando ? "atualizada" : "salva no histórico"}.`);
   imprimirCotacao(registro.id); // abre a impressão (Salvar como PDF) já no modelo da cotação formal
 }
 $("cmBtnSalvar").addEventListener("click", cmSalvar);
+
+let cmEditandoId = null;
+function cmAtualizarBotaoSalvar() {
+  const c = cmEditandoId ? historicoCotacoes.find((x) => x.id === cmEditandoId) : null;
+  $("cmBtnSalvar").textContent = c ? `Atualizar cotação nº ${c.numeroFormatado}` : "Salvar cotação";
+  $("cmEditandoAviso").hidden = !c;
+  $("cmEditandoAviso").textContent = c ? `Editando a cotação nº ${c.numeroFormatado} — ao salvar, ela é atualizada (mesmo número) e o DRE recalculado.` : "";
+  $("cmBtnNova").hidden = !c;
+}
+
+/** Volta uma cotação manual salva para a aba Cotação Manual, para corrigir e salvar de novo. */
+function cmCarregar(id) {
+  const c = historicoCotacoes.find((x) => x.id === id);
+  if (!c || c.tipo !== "manual") return;
+  const set = (elId, v) => { $(elId).value = v ?? ""; };
+  // solta o "manual" de todos os campos do DRE e deixa a cotação refazer o automático
+  ["L", "S"].forEach((p) => {
+    ["custo", "frete", "pedagio", "extra", "mercadoria", "icms", "PctImp", "PctFixo", "PctCom", "ComOn"].forEach((k) => delete cmCampo(p, k).dataset.manual);
+  });
+  set("cmOrigem", c.origem); set("cmDestino", c.destino);
+  cmUfOrigem = c.ufOrigem || ""; cmUfDestino = c.ufDestino || "";
+  if (c.tipoVeiculoMercado) $("cmVeiculo").value = c.tipoVeiculoMercado;
+  if (c.vendedor) $("cmVendedor").value = c.vendedor;
+  set("cmMercadoria", c.valorMercadoria); set("cmFretePeso", c.fretePesoEfetivo); set("cmSeguro", c.advalorem); set("cmPedagio", c.pedagio);
+  cmIniciarPadroes(); // refaz os valores automáticos (inclui cmRecalcular)
+  // o que foi salvo diferente do automático vira campo "manual" de novo (Lucro Presumido
+  // primeiro, recalcula, e só então o Simples — que copia o Lucro Presumido)
+  const restaurarLado = (p) => {
+    const bloco = (c.dreManual || {})[p];
+    if (!bloco) return;
+    Object.entries(bloco.entradas || {}).forEach(([k, val]) => {
+      const el = cmCampo(p, k);
+      if (!el || Math.abs((parseFloat(el.value) || 0) - val) > 0.005) {
+        el.value = String(val);
+        el.dataset.manual = "1";
+      }
+    });
+    const on = !!bloco.comissao;
+    const cb = cmCampo(p, "ComOn");
+    if (cb.checked !== on) { cb.checked = on; cb.dataset.manual = "1"; }
+  };
+  restaurarLado("L");
+  cmRecalcular();
+  restaurarLado("S");
+  cmRecalcular();
+  cmEditandoId = id;
+  cmSalvoId = null;
+  cmAtualizarBotaoSalvar();
+  $("cmMsgSalvar").textContent = "";
+  ativarAba("cotacaoManual");
+}
+
+/** Sai do modo edição e limpa a aba para uma cotação nova. */
+function cmNova() {
+  cmEditandoId = null;
+  ["cmOrigem", "cmDestino"].forEach((i) => ($(i).value = ""));
+  ["cmMercadoria", "cmFretePeso", "cmSeguro", "cmPedagio"].forEach((i) => ($(i).value = "0"));
+  cmUfOrigem = ""; cmUfDestino = "";
+  ["L", "S"].forEach((p) => {
+    ["custo", "frete", "pedagio", "extra", "mercadoria", "icms", "PctImp", "PctFixo", "PctCom", "ComOn"].forEach((k) => {
+      const el = cmCampo(p, k);
+      delete el.dataset.manual;
+      if (el.type === "checkbox") el.checked = false; else el.value = "";
+    });
+  });
+  cmIniciarPadroes();
+  cmAtualizarBotaoSalvar();
+  $("cmMsgSalvar").textContent = "";
+}
+$("cmBtnNova").addEventListener("click", cmNova);
 $("cmBtnImprimir").addEventListener("click", () => {
   if (cmSalvoId) imprimirCotacao(cmSalvoId);
 });

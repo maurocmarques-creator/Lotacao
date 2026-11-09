@@ -517,3 +517,6 @@ footer { text-align: center; color: var(--gray-500); font-size: 11.5px; padding:
 
 .cm-botoes { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
 .cm-campos input:disabled { background: #f1f3f5; color: #98a2b3; }
+
+#dreSingleBox[hidden], #dreManualLadoALado[hidden], #dreManualCompara[hidden] { display: none; }
+#dreManualCompara { margin-top: 18px; }

@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "09/11/2026 14:32";
+const BUILD_TIMESTAMP = "09/11/2026 14:38";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -2406,7 +2406,7 @@ function renderHistorico() {
     tr.dataset.cotacaoId = c.id;
     const manual = c.tipo === "manual";
     tr.innerHTML = `
-      <td>${manual ? `${c.numeroFormatado} <small>(manual)</small>` : c.numeroFormatado ? `<span class="numero-cotacao-link" data-dre-cotacao="${c.id}">${c.numeroFormatado}</span>` : "—"}</td>
+      <td>${c.numeroFormatado ? `<span class="numero-cotacao-link" data-dre-cotacao="${c.id}">${c.numeroFormatado}</span>${manual ? ' <small>(manual)</small>' : ""}` : "—"}</td>
       <td>${fmtDataHora(c.criadoEm)}</td>
       <td>${c.vendedor || "—"}</td>
       <td>${c.origem || "—"}</td>
@@ -2716,6 +2716,14 @@ let dreAtualCotacaoId = null;
 function abrirDreProjetado(id) {
   const c = historicoCotacoes.find((item) => item.id === id);
   if (!c) return;
+
+  if (c.tipo === "manual") {
+    abrirDreManualSalvo(c);
+    return;
+  }
+  // volta ao layout de uma coluna (a cotação manual usa as duas colunas)
+  $("dreSingleBox").hidden = false;
+  $("dreManualLadoALado").hidden = true;
 
   dreAtualCotacaoId = id;
   $("dreNumeroCotacao").textContent = `— Cotação Nº ${c.numeroFormatado}`;
@@ -3651,10 +3659,16 @@ function cmRenderDre(p, rotuloImposto) {
   // custoOperacao = o digitado (já com pedágio e extra); o calcularDreLado separa em
   // Contratação + Pedágio + Custo Extra, que somados fecham no valor digitado.
   const d = calcularDreLado(frete, v("custo"), v("icms"), v("pedagio"), v("mercadoria"), v("PctImp"), pctCom, v("PctFixo"), v("extra"), "");
+  $(`cm${p}Tabela`).innerHTML = cmLinhasDre(d, rotuloImposto, v("PctImp"), v("PctFixo"), comOn, pctCom);
+  return d;
+}
+
+/** Linhas (HTML) do DRE de um lado — usada na aba Cotação Manual e na tela do DRE salvo. */
+function cmLinhasDre(d, rotuloImposto, pctImp, pctFixo, comOn, pctCom) {
   const pct = (n) => `${fmtNum(n, 2)}%`;
-  $(`cm${p}Tabela`).innerHTML = [
+  return [
     linhaDre("Frete Total", d.freteTotal),
-    linhaDre(`(&minus;) ${rotuloImposto} (${pct(v("PctImp"))})`, -d.impostosFederais),
+    linhaDre(`(&minus;) ${rotuloImposto} (${pct(pctImp)})`, -d.impostosFederais),
     linhaDre("(&minus;) ICMS", -d.icms),
     linhaDre("(=) ROB", d.rob, "dre-subtotal"),
     linhaDre("Custo da Contratação", -d.custoContratacao, "dre-subitem"),
@@ -3664,11 +3678,41 @@ function cmRenderDre(p, rotuloImposto) {
     linhaDre(`Comissão${comOn ? ` (${pct(pctCom)} de Frete − ICMS)` : ""}`, -d.comissao, "dre-subitem"),
     linhaDre("(=) Custo Variável", -d.custoVariavel, "dre-subtotal"),
     linhaDre("(=) Receita Operacional Líquida", d.receitaOperacionalLiquida, "dre-subtotal"),
-    linhaDre(`(&minus;) Custo Fixo (${pct(v("PctFixo"))})`, -d.custoFixo),
+    linhaDre(`(&minus;) Custo Fixo (${pct(pctFixo)})`, -d.custoFixo),
     linhaDre("(=) Resultado", d.resultado, `dre-resultado${d.resultado < 0 ? " dre-negativo" : ""}`),
     `<tr class="dre-resultado-pct${d.resultado < 0 ? " dre-negativo" : ""}"><td></td><td>${fmtNum(d.resultadoPct, 2)}% do faturamento</td></tr>`,
   ].join("");
-  return d;
+}
+
+/** Abre, na tela "DRE Projetado", a cotação manual salva: os dois cenários lado a lado. */
+function abrirDreManualSalvo(c) {
+  dreAtualCotacaoId = c.id;
+  $("dreNumeroCotacao").textContent = `— Cotação Nº ${c.numeroFormatado} (manual)`;
+  $("dreSubtitulo").textContent = `${c.origem || "?"} → ${c.destino || "?"} · ${fmtDataHora(c.criadoEm)} · Vendedor: ${c.vendedor || "—"} · Frete Total: ${fmtBRL(c.totalEfetivo)}`;
+  $("dreSingleBox").hidden = true;
+  $("dreManualLadoALado").hidden = false;
+  $("btnExportarDreExcel").hidden = true;
+
+  const dre = c.dreManual || {};
+  const coluna = (titulo, bloco, rotuloImposto) => {
+    if (!bloco || !bloco.dre) return `<div class="cm-dre-col"><h3>${titulo}</h3><p class="sem-spot">DRE não disponível nesta cotação.</p></div>`;
+    const e = bloco.entradas || {};
+    const pctCom = bloco.comissao ? e.PctCom : 0;
+    return `<div class="cm-dre-col"><h3>${titulo}</h3><table class="composicao-table dre-table">${cmLinhasDre(bloco.dre, rotuloImposto, e.PctImp, e.PctFixo, bloco.comissao, pctCom)}</table></div>`;
+  };
+  $("dreManualCols").innerHTML = coluna("Lucro Presumido", dre.L, "Impostos Federais") + coluna("Simples Nacional", dre.S, "Simples Nacional");
+
+  const box = $("dreManualCompara");
+  if (dre.L && dre.L.dre && dre.S && dre.S.dre) {
+    const dif = dre.S.dre.resultado - dre.L.dre.resultado;
+    box.hidden = false;
+    $("dreManualComparaTexto").textContent =
+      Math.abs(dif) < 0.005 ? "Resultado igual nos dois regimes" : `Melhor resultado: ${dif > 0 ? "Simples Nacional" : "Lucro Presumido"} — vantagem de`;
+    $("dreManualComparaValor").textContent = Math.abs(dif) < 0.005 ? "" : fmtBRL(Math.abs(dif));
+  } else {
+    box.hidden = true;
+  }
+  ativarAba("dre");
 }
 
 let cmUltimaCotacao = null;

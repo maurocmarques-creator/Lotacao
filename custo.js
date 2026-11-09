@@ -9,10 +9,10 @@
   const veic = (nome, consumo, mecanica, autonomia, lic, seguro, oleo, autOleo, pneusQtd, pneusValor, rastreador) => ({
     nome, combustivel: "Diesel", custoLitro: 6.25, consumo, mecanica, autonomia, licenciamento: lic, seguro,
     trocaOleo: oleo, autonomiaOleo: autOleo, pneusQtd, pneusValor, rastreador, depreciacaoKm: 0,
-    salarioMotorista: 4000, salarioAjudante: 0,
+    salarioMotorista: 4000, horasMotorista: 158.4, salarioAjudante: 0, horasAjudante: 158.4,
   });
   const PADRAO = {
-    params: { fgts: 8, rescisao: 5, horasMes: 158.4 },
+    params: { fgts: 8, rescisao: 5 },
     veiculos: [
       veic("QIG6150 BOXER 9 CBM 1800 Kg", 12, 15000, 70000, 5000, 8500, 1500, 20000, 4, 1000, 380),
       veic("MLU0908 TOCO 32 CBM 5 TONS", 4, 44000, 60000, 2500, 20000, 1500, 25000, 6, 1200, 380),
@@ -34,9 +34,9 @@
     return { fgts, ferias: (4 / 3) * (1 + fgts) / 12, decimo: (1 + fgts) / 12, rescisao: num(p.rescisao) / 100 };
   }
   /** Custo/hora = salário com encargos (FGTS + férias + 13º + provisão de rescisões) ÷ horas trabalhadas no mês. */
-  function custoHora(salario, p) {
+  function custoHora(salario, horas, p) {
     const e = encargos(p);
-    return div(num(salario) * (1 + e.fgts + e.ferias + e.decimo + e.rescisao), num(p.horasMes));
+    return div(num(salario) * (1 + e.fgts + e.ferias + e.decimo + e.rescisao), num(horas));
   }
   /** Custos por km rodado de um veículo. A "autonomia" da mecânica é também o km rodado ao ano. */
   function custoKm(v) {
@@ -61,7 +61,7 @@
     const manutTotal = Object.values(manutencao).reduce((a, b) => a + b, 0);
     const r = {
       combustivel: dist * k.combustivel, manutencao, manutTotal, depreciacao: dist * k.depreciacao,
-      motorista: hMot * custoHora(v.salarioMotorista, p), ajudante: hAju * custoHora(v.salarioAjudante, p),
+      motorista: hMot * custoHora(v.salarioMotorista, v.horasMotorista, p), ajudante: hAju * custoHora(v.salarioAjudante, v.horasAjudante, p),
       despesas: desp, pedagio: ped,
     };
     r.total = r.combustivel + r.manutTotal + r.depreciacao + r.motorista + r.ajudante + r.despesas + r.pedagio;
@@ -70,6 +70,25 @@
   }
 
   /* ---------- cadastro (grade: linhas = itens, colunas = veículos) ---------- */
+  const pct = (x) => `${fmtNum(x * 100, 2)}%`;
+  /** Bloco de mão de obra igual ao da planilha: Salário, FGTS, Férias, 13º, Provisão de Rescisões,
+   *  Horas trabalhadas ao mês e Custo/hora. Os percentuais ficam ao lado do rótulo (editáveis no
+   *  bloco do motorista; o ajudante usa os mesmos). */
+  function maoDeObra(titulo, sal, hor, id, editavel) {
+    const campoPct = (nome, chave) => editavel
+      ? `${nome} <input type="number" step="any" min="0" class="cv-pct" data-p="${chave}" value="${esc(M.params[chave])}"> %`
+      : `${nome} <b data-pct="${chave === "fgts" ? "fgts" : "rescisao"}">${pct(encargos(M.params)[chave === "fgts" ? "fgts" : "rescisao"])}</b>`;
+    const e = () => encargos(M.params);
+    return { t: titulo, linhas: [
+      { l: "Salário (R$ / mês)", k: sal },
+      { lh: () => campoPct("FGTS", "fgts"), c: `fgts${id}`, f: (v) => fmtBRL(num(v[sal]) * e().fgts) },
+      { lh: () => `Férias <b data-pct="ferias">${pct(e().ferias)}</b>`, c: `fer${id}`, f: (v) => fmtBRL(num(v[sal]) * e().ferias) },
+      { lh: () => `13º Salário <b data-pct="decimo">${pct(e().decimo)}</b>`, c: `dec${id}`, f: (v) => fmtBRL(num(v[sal]) * e().decimo) },
+      { lh: () => campoPct("Provisão Rescisões", "rescisao"), c: `res${id}`, f: (v) => fmtBRL(num(v[sal]) * e().rescisao) },
+      { l: "Horas Trabalhadas ao mês", k: hor },
+      { l: "Custo/hora de trabalho", c: `hora${id}`, f: (v) => fmtBRL(custoHora(v[sal], v[hor], M.params)) },
+    ] };
+  }
   const SECOES = [
     { t: "01. Combustível", linhas: [
       { l: "Tipo de combustível", k: "combustivel", texto: true },
@@ -97,29 +116,9 @@
     { t: "03. Depreciação", linhas: [
       { l: "Depreciação (R$ / km rodado)", k: "depreciacaoKm" },
     ] },
-    { t: "04. Mão de obra — Motorista", linhas: [
-      { l: "Salário (R$ / mês)", k: "salarioMotorista" },
-      { l: "Custo / hora de trabalho (com encargos)", c: "horaMot", f: (v) => fmtBRL(custoHora(v.salarioMotorista, M.params)) },
-    ] },
-    { t: "05. Mão de obra — Ajudante", linhas: [
-      { l: "Salário (R$ / mês)", k: "salarioAjudante" },
-      { l: "Custo / hora de trabalho (com encargos)", c: "horaAju", f: (v) => fmtBRL(custoHora(v.salarioAjudante, M.params)) },
-    ] },
+    maoDeObra("04. Mão de Obra — Motorista", "salarioMotorista", "horasMotorista", "M", true),
+    maoDeObra("05. Mão de Obra — Ajudante", "salarioAjudante", "horasAjudante", "A", false),
   ];
-
-  function renderParametros() {
-    const e = encargos(M.params);
-    $("cvParams").innerHTML = `
-      <label>FGTS (%)<input type="number" step="any" min="0" data-p="fgts" value="${esc(M.params.fgts)}"></label>
-      <label>Provisão de rescisões (%)<input type="number" step="any" min="0" data-p="rescisao" value="${esc(M.params.rescisao)}"></label>
-      <label>Horas trabalhadas ao mês<input type="number" step="any" min="0" data-p="horasMes" value="${esc(M.params.horasMes)}"></label>
-      <small class="hint" id="cvEncargosInfo"></small>`;
-    atualizarInfoEncargos(e);
-  }
-  function atualizarInfoEncargos(e = encargos(M.params)) {
-    const el = $("cvEncargosInfo");
-    if (el) el.textContent = `Férias = 4/3 × (1 + FGTS) ÷ 12 = ${fmtNum(e.ferias * 100, 2)}% · 13º = (1 + FGTS) ÷ 12 = ${fmtNum(e.decimo * 100, 2)}% · horas/mês da planilha: 220 × 90% × 80% = 158,4.`;
-  }
 
   function renderGrade() {
     const cab = M.veiculos.map((v, i) =>
@@ -131,7 +130,7 @@
         const cels = M.veiculos.map((v, i) => r.c
           ? `<td class="cv-calc" data-c="${r.c}" data-vi="${i}">—</td>`
           : `<td><input type="${r.texto ? "text" : "number"}" ${r.texto ? "" : 'step="any" min="0"'} data-vi="${i}" data-k="${r.k}" value="${esc(v[r.k])}"></td>`).join("");
-        corpo += `<tr class="${r.c ? "cv-linha-calc" : ""}"><td class="cv-rotulo">${r.l}</td>${cels}</tr>`;
+        corpo += `<tr class="${r.c ? "cv-linha-calc" : ""}"><td class="cv-rotulo">${r.lh ? r.lh() : r.l}</td>${cels}</tr>`;
       });
     });
     $("cvGrade").innerHTML = `<thead><tr><th class="cv-rotulo">Veículo</th>${cab}</tr></thead><tbody>${corpo}</tbody>`;
@@ -143,10 +142,18 @@
     document.querySelectorAll("#cvGrade td[data-c]").forEach((td) => {
       td.textContent = porId[td.dataset.c](M.veiculos[+td.dataset.vi]);
     });
+    const e = encargos(M.params);
+    document.querySelectorAll("#cvGrade b[data-pct]").forEach((b) => { b.textContent = pct(e[b.dataset.pct === "decimo" ? "decimo" : b.dataset.pct]); });
   }
 
   $("cvGrade").addEventListener("input", (e) => {
-    const el = e.target; if (el.dataset.k === undefined) return;
+    const el = e.target;
+    if (el.dataset.p) {
+      M.params[el.dataset.p] = num(el.value);
+      atualizarCalculos(); recalcular();
+      return;
+    }
+    if (el.dataset.k === undefined) return;
     const v = M.veiculos[+el.dataset.vi];
     v[el.dataset.k] = el.type === "number" ? num(el.value) : el.value;
     atualizarCalculos();
@@ -157,11 +164,6 @@
     if (M.veiculos.length <= 1) return;
     M.veiculos.splice(+b.dataset.rem, 1);
     renderGrade(); preencherSelectVeiculo();
-  });
-  $("cvParams").addEventListener("input", (e) => {
-    const k = e.target.dataset.p; if (!k) return;
-    M.params[k] = num(e.target.value);
-    atualizarInfoEncargos(); atualizarCalculos(); recalcular();
   });
   $("cvBtnAdd").addEventListener("click", () => {
     const base = structuredClone(M.veiculos[M.veiculos.length - 1] || PADRAO.veiculos[0]);
@@ -218,13 +220,17 @@
   });
 
   /* ---------- início ---------- */
-  renderParametros();
   renderGrade();
   preencherSelectVeiculo();
   carregarConfig(KEY, PADRAO).then((salvo) => {
     if (salvo && Array.isArray(salvo.veiculos) && salvo.veiculos.length) {
+      const horasAntigas = num((salvo.params || {}).horasMes) || 158.4; // cadastro salvo antes das horas por veículo
       M = { params: { ...PADRAO.params, ...(salvo.params || {}) }, veiculos: salvo.veiculos };
-      renderParametros(); renderGrade(); preencherSelectVeiculo();
+      M.veiculos.forEach((v) => {
+        if (v.horasMotorista === undefined) v.horasMotorista = horasAntigas;
+        if (v.horasAjudante === undefined) v.horasAjudante = horasAntigas;
+      });
+      renderGrade(); preencherSelectVeiculo();
     }
   });
 })();

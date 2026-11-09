@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "27/10/2026 17:02";
+const BUILD_TIMESTAMP = "09/11/2026 14:11";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",
@@ -2795,7 +2795,7 @@ function imprimirCotacao(id) {
         <div class="cp-empresa">
           <div class="cp-marca">PORTOEXPRESS</div>
           <div class="cp-marca-sub">LOGÍSTICA LTDA</div>
-          <div class="cp-dados">CNPJ: 22.725.000/0001-91 &nbsp;|&nbsp; Av. Gov. Adolfo Konder, 2720 - Itajaí/SC &nbsp;|&nbsp; CEP 88.308-002<br>(47) 3348-1714 / 3319-5982</div>
+          <div class="cp-dados">CNPJ: 22.725.000/0001-91 &nbsp;|&nbsp; Av. Gov. Adolfo Konder, 2720 - Itajaí/SC<br>CEP 88.308-002 &nbsp;|&nbsp; (47) 3348-1714 / 3319-5982</div>
         </div>
         <div class="cp-selo"><small>COTAÇÃO DE FRETE</small><strong>Nº ${numero}</strong><span>Frete Fechado · Lotação</span></div>
       </div>
@@ -3508,6 +3508,202 @@ function calcularDreManual() {
 $("mkpSelecionadoManual").addEventListener("change", calcularDreManual);
 
 /* ============================================================
+   Cotação Manual + DRE Manual comparativo (Lucro Presumido x Simples Nacional)
+   Aba independente: não usa nem altera o Histórico nem as outras abas.
+   Lado "L" = Lucro Presumido, lado "S" = Simples Nacional. Os campos do DRE vêm
+   preenchidos pela cotação, mas qualquer um pode ser editado (aí deixa de ser
+   automático). O lado S copia o L até o usuário editar o campo dele.
+   ============================================================ */
+const CM_PCT_SIMPLES = 9.9;
+const CM_PCT_COMISSAO = 3;
+let cmUfOrigem = "";
+let cmUfDestino = "";
+
+const cmNum = (id) => parseFloat($(id).value) || 0;
+const cmCampo = (p, k) => $(`cm${p}${k}`);
+const CM_CAMPOS_DRE = [
+  ["custo", "Custo da Contratação (R$) — com pedágio e custo extra"],
+  ["frete", "Frete Total (R$)"],
+  ["pedagio", "Pedágio (R$)"],
+  ["extra", "Custo Extra (R$)"],
+  ["mercadoria", "Valor da Mercadoria (R$)"],
+  ["icms", "ICMS (R$)"],
+];
+
+function cmMontarColunas() {
+  const coluna = (p, titulo, rotuloImp) => `
+    <div class="cm-dre-col">
+      <h3>${titulo}</h3>
+      <div class="cm-campos">
+        ${CM_CAMPOS_DRE.map(([k, r]) => `<label>${r}<input type="number" id="cm${p}${k}" min="0" step="0.01" placeholder="0,00"></label>`).join("")}
+        <label>${rotuloImp} (%)<input type="number" id="cm${p}PctImp" min="0" step="0.01"></label>
+        <label>% Custo Fixo<input type="number" id="cm${p}PctFixo" min="0" step="0.01"></label>
+        <label class="cm-check"><input type="checkbox" id="cm${p}ComOn"> Terá comissão</label>
+        <label>% Comissão<input type="number" id="cm${p}PctCom" min="0" step="0.01"></label>
+      </div>
+      <p class="sem-spot" id="cm${p}Vazio">Preencha o Frete Total para calcular.</p>
+      <table class="composicao-table dre-table" id="cm${p}Tabela"></table>
+    </div>`;
+  $("cmDreCols").innerHTML =
+    coluna("L", "Lucro Presumido", "% Impostos Federais") + coluna("S", "Simples Nacional", "% Simples Nacional");
+}
+cmMontarColunas();
+
+/** Define o valor de um campo só se o usuário ainda não mexeu nele. */
+function cmSetAuto(p, k, valor) {
+  const el = cmCampo(p, k);
+  if (el.dataset.manual === "1") return;
+  if (el.type === "checkbox") el.checked = !!valor;
+  else el.value = valor === "" || valor === null || valor === undefined ? "" : String(Math.round(Number(valor) * 10000) / 10000);
+}
+
+function cmIniciarPadroes() {
+  cmSetAuto("L", "extra", 0);
+  cmSetAuto("L", "PctImp", Number(vendaParams.pctImpostos) || 0);
+  cmSetAuto("L", "PctFixo", Number(vendaParams.pctCustoFixo) || 0);
+  cmSetAuto("L", "PctCom", CM_PCT_COMISSAO);
+  cmSetAuto("S", "icms", 0);
+  cmSetAuto("S", "PctImp", CM_PCT_SIMPLES);
+  cmRecalcular();
+}
+
+function preencherTipoVeiculoCm() {
+  const sel = $("cmVeiculo");
+  const atual = sel.value;
+  sel.innerHTML = optionsVeiculoSpot();
+  if (atual) sel.value = atual;
+}
+
+configurarAutocompleteCidadeElementos($("cmOrigem"), $("listCmOrigem"), (m) => {
+  cmUfOrigem = m.uf;
+  cmRecalcular();
+});
+configurarAutocompleteCidadeElementos($("cmDestino"), $("listCmDestino"), (m) => {
+  cmUfDestino = m.uf;
+  cmRecalcular();
+});
+
+/** Calcula a cotação (Frete Peso + Seguro + Pedágio, ICMS "por dentro") e mostra a tabela.
+ * Devolve {total, icms} ou null quando falta dado / alíquota. */
+function cmCalcularCotacao() {
+  const fretePeso = cmNum("cmFretePeso");
+  const seguro = cmNum("cmSeguro");
+  const pedagio = cmNum("cmPedagio");
+  const mercadoria = cmNum("cmMercadoria");
+  const vazio = (msg) => {
+    $("cmQuoteTabela").innerHTML = "";
+    $("cmQuoteVazio").hidden = false;
+    $("cmQuoteVazio").textContent = msg;
+    $("cmPctBox").hidden = true;
+    return null;
+  };
+
+  if (!cmUfOrigem || !cmUfDestino) {
+    $("cmIcmsInfo").textContent = "";
+    return vazio("Preencha Origem, Destino e o Frete Peso para calcular o Frete Total.");
+  }
+  const { aliquota, fonte } = obterAliquotaIcms(cmUfOrigem, cmUfDestino);
+  $("cmIcmsInfo").textContent =
+    aliquota !== null ? `ICMS ${cmUfOrigem} → ${cmUfDestino}: ${fmtNum(aliquota, 2)}% (${fonte})` : `ICMS: ${fonte}`;
+  if (aliquota === null || aliquota >= 100) return vazio("Sem alíquota de ICMS cadastrada para essa Origem/Destino — cadastre na aba ICMS.");
+  if (!fretePeso) return vazio("Preencha o Frete Peso para calcular o Frete Total.");
+
+  const subtotal = fretePeso + seguro + pedagio;
+  const total = subtotal / (1 - aliquota / 100);
+  const icms = total - subtotal;
+  $("cmQuoteVazio").hidden = true;
+  $("cmQuoteTabela").innerHTML = [
+    `<tr><td>Frete Peso</td><td>${fmtBRL(fretePeso)}</td></tr>`,
+    `<tr><td>Seguro</td><td>${fmtBRL(seguro)}</td></tr>`,
+    `<tr><td>Pedágio</td><td>${fmtBRL(pedagio)}</td></tr>`,
+    `<tr><td>ICMS ${fmtNum(aliquota, 2)}% (por dentro)</td><td>${fmtBRL(icms)}</td></tr>`,
+    `<tr class="total"><td>Frete Total</td><td>${fmtBRL(total)}</td></tr>`,
+  ].join("");
+  if (mercadoria > 0) {
+    $("cmPctBox").hidden = false;
+    $("cmPct").textContent = fmtNum((total / mercadoria) * 100, 2) + "%";
+  } else {
+    $("cmPctBox").hidden = true;
+  }
+  return { total, icms };
+}
+
+/** Monta o DRE de um lado (L ou S) a partir dos campos dele. Devolve o DRE ou null. */
+function cmRenderDre(p, rotuloImposto) {
+  const v = (k) => parseFloat(cmCampo(p, k).value) || 0;
+  const frete = v("frete");
+  if (!frete) {
+    $(`cm${p}Tabela`).innerHTML = "";
+    $(`cm${p}Vazio`).hidden = false;
+    return null;
+  }
+  $(`cm${p}Vazio`).hidden = true;
+  const comOn = cmCampo(p, "ComOn").checked;
+  cmCampo(p, "PctCom").disabled = !comOn;
+  const pctCom = comOn ? v("PctCom") : 0;
+  // custoOperacao = o digitado (já com pedágio e extra); o calcularDreLado separa em
+  // Contratação + Pedágio + Custo Extra, que somados fecham no valor digitado.
+  const d = calcularDreLado(frete, v("custo"), v("icms"), v("pedagio"), v("mercadoria"), v("PctImp"), pctCom, v("PctFixo"), v("extra"), "");
+  const pct = (n) => `${fmtNum(n, 2)}%`;
+  $(`cm${p}Tabela`).innerHTML = [
+    linhaDre("Frete Total", d.freteTotal),
+    linhaDre(`(&minus;) ${rotuloImposto} (${pct(v("PctImp"))})`, -d.impostosFederais),
+    linhaDre("(&minus;) ICMS", -d.icms),
+    linhaDre("(=) ROB", d.rob, "dre-subtotal"),
+    linhaDre("Custo da Contratação", -d.custoContratacao, "dre-subitem"),
+    linhaDre("Pedágio", -d.pedagio, "dre-subitem"),
+    linhaDre("Custo Extra", -d.servicoAdicional, "dre-subitem"),
+    linhaDre("Custo com Seguro (0,04% da mercadoria)", -d.custoSeguro, "dre-subitem"),
+    linhaDre(`Comissão${comOn ? ` (${pct(pctCom)} de Frete − ICMS)` : ""}`, -d.comissao, "dre-subitem"),
+    linhaDre("(=) Custo Variável", -d.custoVariavel, "dre-subtotal"),
+    linhaDre("(=) Receita Operacional Líquida", d.receitaOperacionalLiquida, "dre-subtotal"),
+    linhaDre(`(&minus;) Custo Fixo (${pct(v("PctFixo"))})`, -d.custoFixo),
+    linhaDre("(=) Resultado", d.resultado, `dre-resultado${d.resultado < 0 ? " dre-negativo" : ""}`),
+    `<tr class="dre-resultado-pct${d.resultado < 0 ? " dre-negativo" : ""}"><td></td><td>${fmtNum(d.resultadoPct, 2)}% do faturamento</td></tr>`,
+  ].join("");
+  return d;
+}
+
+function cmRecalcular() {
+  const quote = cmCalcularCotacao();
+  // Cotação -> lado Lucro Presumido (só o que o usuário não editou)
+  cmSetAuto("L", "frete", quote ? quote.total : "");
+  cmSetAuto("L", "icms", quote ? quote.icms : "");
+  cmSetAuto("L", "pedagio", cmNum("cmPedagio"));
+  cmSetAuto("L", "mercadoria", cmNum("cmMercadoria"));
+  // Lucro Presumido -> Simples Nacional (ICMS e % do imposto são próprios do Simples)
+  ["custo", "frete", "pedagio", "extra", "mercadoria", "PctFixo", "PctCom"].forEach((k) => cmSetAuto("S", k, cmCampo("L", k).value));
+  cmSetAuto("S", "ComOn", cmCampo("L", "ComOn").checked);
+
+  const dL = cmRenderDre("L", "Impostos Federais");
+  const dS = cmRenderDre("S", "Simples Nacional");
+
+  const box = $("cmComparaBox");
+  if (dL && dS) {
+    const dif = dS.resultado - dL.resultado;
+    box.hidden = false;
+    $("cmComparaTexto").textContent =
+      Math.abs(dif) < 0.005 ? "Resultado igual nos dois regimes" : `Melhor resultado: ${dif > 0 ? "Simples Nacional" : "Lucro Presumido"} — vantagem de`;
+    $("cmComparaValor").textContent = Math.abs(dif) < 0.005 ? "" : fmtBRL(Math.abs(dif));
+  } else {
+    box.hidden = true;
+  }
+}
+
+["cmFretePeso", "cmSeguro", "cmPedagio", "cmMercadoria"].forEach((id) => $(id).addEventListener("input", cmRecalcular));
+$("cmVeiculo").addEventListener("change", cmRecalcular);
+["L", "S"].forEach((p) => {
+  const ids = [...CM_CAMPOS_DRE.map(([k]) => k), "PctImp", "PctFixo", "ComOn", "PctCom"];
+  ids.forEach((k) => {
+    const el = cmCampo(p, k);
+    el.addEventListener(el.type === "checkbox" ? "change" : "input", () => {
+      el.dataset.manual = "1";
+      cmRecalcular();
+    });
+  });
+});
+
+/* ============================================================
    Init — busca os dados no banco compartilhado ANTES de renderizar
    qualquer cadastro, para nunca mostrar telas vazias por um instante.
    ============================================================ */
@@ -3530,6 +3726,8 @@ async function iniciarApp() {
   preencherSelectMkp();
   preencherSelectMkpManual();
   preencherTipoVeiculoManual();
+  preencherTipoVeiculoCm();
+  cmIniciarPadroes();
   preencherFiltroIcms();
   renderTabelaIcms();
   $("ajusteKm").value = ajusteKmPct;

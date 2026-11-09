@@ -3,7 +3,7 @@
 /* Data/hora do último deploy — atualizada manualmente a cada push, para o
    cabeçalho mostrar se a versão carregada é a mais recente (ajuda a detectar
    cache antigo de CDN, por exemplo). */
-const BUILD_TIMESTAMP = "09/11/2026 14:44";
+const BUILD_TIMESTAMP = "09/11/2026 20:22";
 
 const NOMES_PADRAO_EIXOS = {
   2: "Toco",

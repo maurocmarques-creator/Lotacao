@@ -4,8 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calculadora de Frete</title>
-<link rel="stylesheet" href="style.css?v=202611091444">
-<link rel="stylesheet" href="carga.css?v=202611091444">
+<link rel="stylesheet" href="style.css?v=202611092022">
+<link rel="stylesheet" href="custo.css?v=202611092022">
+<link rel="stylesheet" href="carga.css?v=202611092022">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -33,6 +34,7 @@
       <div class="tabs-dropdown-menu" id="cadastrosMenu" hidden>
         <button class="tab-btn dropdown-item" data-tab="antt">Cadastro ANTT</button>
         <button class="tab-btn dropdown-item" data-tab="veiculos">Custo por KM</button>
+        <button class="tab-btn dropdown-item" data-tab="custoVeiculo">Custo do Veículo</button>
         <button class="tab-btn dropdown-item" data-tab="spot">Custo Operação SPOT</button>
         <button class="tab-btn dropdown-item" data-tab="icms">ICMS</button>
         <button class="tab-btn dropdown-item" data-tab="rota">Rota</button>
@@ -45,6 +47,7 @@
       <div class="tabs-dropdown-menu" id="calculoMenu" hidden>
         <button class="tab-btn dropdown-item active" data-tab="calculadora">Lotação</button>
         <button class="tab-btn dropdown-item" data-tab="cotacaoManual">Cotação Manual</button>
+        <button class="tab-btn dropdown-item" data-tab="custoCalculo">Custo Operacional</button>
         <button class="tab-btn dropdown-item" data-tab="dreManual">DRE Manual</button>
       </div>
     </div>
@@ -425,6 +428,58 @@
         <button type="button" id="cmBtnImprimir" class="btn-secondary" disabled>Imprimir / PDF</button>
         <button type="button" id="cmBtnNova" class="btn-secondary" hidden>Nova cotação (limpar)</button>
         <span class="save-msg" id="cmMsgSalvar"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ABA CADASTRO CUSTO DO VEÍCULO ===================== -->
+  <section id="tab-custoVeiculo" class="tab-panel">
+    <div class="card">
+      <h2>Cadastro — Custo do Veículo</h2>
+      <p class="hint">
+        Cada coluna é um veículo (como na planilha de custo detalhado). Os custos por km
+        (combustível, manutenção, depreciação) e o custo/hora da mão de obra são calculados aqui
+        e usados na aba Cálculo do Transporte &rsaquo; Custo Operacional. Os valores iniciais vêm da
+        planilha de 10/09/2026; edite e clique em <b>Salvar cadastro</b> para valer para todos.
+      </p>
+      <h3 class="cv-sub">Encargos da mão de obra (valem para motorista e ajudante)</h3>
+      <div id="cvParams"></div>
+      <div class="cv-scroll"><table class="cv-grade" id="cvGrade"></table></div>
+      <div class="cv-botoes">
+        <button type="button" id="cvBtnAdd" class="btn-secondary">+ Adicionar veículo</button>
+        <button type="button" id="cvBtnSalvar" class="btn-primary">Salvar cadastro</button>
+        <span class="save-msg" id="cvMsg"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ABA CUSTO OPERACIONAL (CÁLCULO) ===================== -->
+  <section id="tab-custoCalculo" class="tab-panel">
+    <div class="card">
+      <h2>Custo Operacional — Custos Diretos</h2>
+      <p class="hint">
+        Escolha o veículo e digite a distância e o tempo operacional. O custo por km do cadastro
+        (combustível, manutenção, depreciação) é multiplicado pela distância; a mão de obra é o
+        custo/hora × horas; despesas e pedágio entram como digitados. Nada aqui é salvo no Histórico.
+      </p>
+      <label class="campo-largo">Veículo
+        <select id="cvcVeiculo"></select>
+      </label>
+      <div class="cvc-campos">
+        <label>Distância a percorrer (km)<input type="number" id="cvcDist" min="0" step="any" placeholder="0" value="0"></label>
+        <label>Tempo motorista (horas)<input type="number" id="cvcHMot" min="0" step="any" placeholder="0" value="0"></label>
+        <label>Tempo ajudante (horas)<input type="number" id="cvcHAju" min="0" step="any" placeholder="0" value="0"></label>
+        <label>Despesas com diária / alimentação (R$)<input type="number" id="cvcDesp" min="0" step="0.01" placeholder="0,00" value="0"></label>
+        <label>Pedágio (R$)<input type="number" id="cvcPed" min="0" step="0.01" placeholder="0,00" value="0"></label>
+      </div>
+      <button type="button" id="cvcBtnMes" class="btn-secondary">Usar a referência da planilha (km/ano ÷ 12 e 220 h)</button>
+    </div>
+    <div class="card">
+      <h2>Resultado</h2>
+      <table class="composicao-table dre-table" id="cvcTabela"></table>
+      <div class="result-box dre-manual-pct" id="cvcPorKmBox">
+        <span class="result-label">Custo direto por km (Custos Diretos ÷ distância)</span>
+        <span class="result-value" id="cvcPorKm">—</span>
       </div>
     </div>
   </section>
@@ -986,9 +1041,10 @@
   <p>Dados compartilhados entre todos os acessos &middot; distância via OpenStreetMap/OSRM, OpenRouteService ou QualP</p>
 </footer>
 
-<script src="app.js?v=202611091444"></script>
+<script src="app.js?v=202611092022"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="carga.js?v=202611091444"></script>
+<script src="custo.js?v=202611092022"></script>
+<script src="carga.js?v=202611092022"></script>
 </body>
 </html>

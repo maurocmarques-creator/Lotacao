@@ -1,0 +1,20 @@
+/* Custo do Veículo (cadastro) e Custo Operacional (cálculo) */
+body:has(#tab-custoVeiculo.active) main { max-width: none; }
+#cvParams { display: grid; grid-template-columns: repeat(3, minmax(0, 220px)); gap: 12px 16px; align-items: end; margin-bottom: 14px; }
+#cvParams small { grid-column: 1 / -1; }
+.cv-scroll { overflow-x: auto; }
+table.cv-grade { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.cv-grade th, table.cv-grade td { padding: 4px 6px; border-bottom: 1px solid var(--gray-200); vertical-align: middle; }
+table.cv-grade th { text-align: left; background: #fff; position: sticky; top: 0; min-width: 150px; }
+table.cv-grade th.cv-rotulo, table.cv-grade td.cv-rotulo { min-width: 280px; text-align: left; color: var(--gray-800); }
+table.cv-grade input { width: 100%; min-width: 0; padding: 5px 6px; font-size: 13px; }
+table.cv-grade input.cv-nome { font-weight: 600; margin-bottom: 4px; }
+table.cv-grade .btn-remove { width: 22px; height: 22px; }
+tr.cv-secao td { background: var(--blue-900); color: #fff; font-weight: 700; padding: 6px 10px; }
+tr.cv-linha-calc td { background: var(--gray-100); color: var(--gray-500); }
+td.cv-calc { font-variant-numeric: tabular-nums; text-align: right; }
+.cv-botoes { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+.cvc-campos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; margin-bottom: 14px; }
+@media (max-width: 800px) { #cvParams, .cvc-campos { grid-template-columns: minmax(0, 1fr); } }
+#cvcPorKmBox { margin-top: 14px; }
+.cv-sub { margin: 0 0 8px; font-size: 14px; color: var(--blue-900); }

@@ -179,44 +179,102 @@
     preencherSelectVeiculo();
   });
 
-  /* ---------- cálculo (linhas 66 a 79 da planilha) ---------- */
+  /* ---------- cálculo e comparação (linhas 66 a 79 da planilha) ---------- */
+  // Cada coluna é um cenário: um veículo + a distância/tempo/despesas/pedágio dele + quantos
+  // veículos. Serve para comparar, por exemplo, 2 vans x 1 três-quartos para a mesma carga.
+  const novoCenario = (vi, base = {}) => ({ vi, dist: base.dist ?? 0, hMot: base.hMot ?? 0, hAju: base.hAju ?? 0, desp: base.desp ?? 0, ped: base.ped ?? 0, qtd: base.qtd ?? 1 });
+  let CEN = [novoCenario(0)];
+  const LINHAS = [
+    ["Custos Diretos (por veículo)", (r) => r.total, "cvc-total"],
+    ["01. Combustível", (r) => r.combustivel],
+    ["02. Manutenção de Veículo", (r) => r.manutTotal],
+    ["a. Mecânica", (r) => r.manutencao.mecanica, "dre-subitem"],
+    ["b. Licenciamento", (r) => r.manutencao.licenciamento, "dre-subitem"],
+    ["c. Seguro", (r) => r.manutencao.seguro, "dre-subitem"],
+    ["d. Troca de Óleo & Filtros", (r) => r.manutencao.oleo, "dre-subitem"],
+    ["e. Pneus", (r) => r.manutencao.pneus, "dre-subitem"],
+    ["f. Rastreador/Monitoramento", (r) => r.manutencao.rastreador, "dre-subitem"],
+    ["03. Depreciação", (r) => r.depreciacao],
+    ["04. Mão de Obra - Motorista", (r) => r.motorista],
+    ["05. Mão de Obra - Ajudante", (r) => r.ajudante],
+    ["06. Despesas (diária/alimentação)", (r) => r.despesas],
+    ["07. Pedágio", (r) => r.pedagio],
+  ];
+
   function preencherSelectVeiculo() {
-    const sel = $("cvcVeiculo"), atual = sel.value;
-    sel.innerHTML = M.veiculos.map((v, i) => `<option value="${i}">${esc(v.nome)}</option>`).join("");
-    if (atual !== "" && +atual < M.veiculos.length) sel.value = atual;
-    recalcular();
+    CEN.forEach((c) => { if (c.vi >= M.veiculos.length) c.vi = 0; });
+    renderComparacao();
   }
-  function recalcular() {
-    const v = M.veiculos[+$("cvcVeiculo").value];
-    if (!v) { $("cvcTabela").innerHTML = ""; return; }
-    const dist = num($("cvcDist").value);
-    const r = calcularCustosDiretos(v, M.params, dist, num($("cvcHMot").value), num($("cvcHAju").value), num($("cvcDesp").value), num($("cvcPed").value));
-    const li = (rot, val, cls) => `<tr class="${cls || ""}"><td>${rot}</td><td>${fmtBRL(val)}</td></tr>`;
-    $("cvcTabela").innerHTML = [
-      li("Custos Diretos", r.total, "total"),
-      li("01. Combustível", r.combustivel),
-      li("02. Manutenção de Veículo", r.manutTotal),
-      li("a. Mecânica", r.manutencao.mecanica, "dre-subitem"),
-      li("b. Licenciamento", r.manutencao.licenciamento, "dre-subitem"),
-      li("c. Seguro", r.manutencao.seguro, "dre-subitem"),
-      li("d. Troca de Óleo & Filtros", r.manutencao.oleo, "dre-subitem"),
-      li("e. Pneus", r.manutencao.pneus, "dre-subitem"),
-      li("f. Rastreador/Monitoramento", r.manutencao.rastreador, "dre-subitem"),
-      li("03. Depreciação", r.depreciacao),
-      li("04. Mão de Obra - Motorista", r.motorista),
-      li("05. Mão de Obra - Ajudante", r.ajudante),
-      li("06. Despesas (diária/alimentação)", r.despesas),
-      li("07. Pedágio", r.pedagio),
-    ].join("");
-    $("cvcPorKm").textContent = dist > 0 ? `${fmtBRL(r.porKm)} por km` : "—";
+  function renderComparacao() {
+    const opcoes = (sel) => M.veiculos.map((v, i) => `<option value="${i}" ${i === sel ? "selected" : ""}>${esc(v.nome)}</option>`).join("");
+    const campo = (c, i, k, rot, step = "any") => `<label>${rot}<input type="number" min="0" step="${step}" data-ci="${i}" data-k="${k}" value="${esc(c[k])}"></label>`;
+    const cab = CEN.map((c, i) => `<th class="cvc-col">
+        <div class="cvc-topo"><b>Veículo ${i + 1}</b>${CEN.length > 1 ? `<button type="button" class="btn-remove" data-crem="${i}" title="Remover da comparação">&times;</button>` : ""}</div>
+        <select data-ci="${i}" data-k="vi">${opcoes(c.vi)}</select>
+        ${campo(c, i, "dist", "Distância a percorrer (km)")}
+        ${campo(c, i, "hMot", "Tempo motorista (horas)")}
+        ${campo(c, i, "hAju", "Tempo ajudante (horas)")}
+        ${campo(c, i, "desp", "Despesas diária/alimentação (R$)", "0.01")}
+        ${campo(c, i, "ped", "Pedágio (R$)", "0.01")}
+        ${campo(c, i, "qtd", "Quantidade de veículos", "1")}
+        <button type="button" class="btn-secondary cvc-mes" data-cmes="${i}" title="Km/ano ÷ 12 e 220 h, como na planilha">Usar referência da planilha</button>
+      </th>`).join("");
+    const linhas = LINHAS.map(([rot, , cls], li) => `<tr class="${cls || ""}"><td class="cvc-rot">${rot}</td>${CEN.map((c, i) => `<td class="cvc-val" data-li="${li}" data-ci="${i}">—</td>`).join("")}</tr>`).join("");
+    const extra = ["porkm", "carga", "dif"].map((id, n) => {
+      const rot = ["Custo direto por km", "Custo total da carga (× quantidade)", "Diferença para o menor"][n];
+      return `<tr class="${n === 1 ? "cvc-total cvc-carga" : ""}"><td class="cvc-rot">${rot}</td>${CEN.map((c, i) => `<td class="cvc-val" data-x="${id}" data-ci="${i}">—</td>`).join("")}</tr>`;
+    }).join("");
+    $("cvcGrade").innerHTML = `<thead><tr><th class="cvc-rot">Comparação de veículos</th>${cab}</tr></thead><tbody>${linhas}${extra}</tbody>`;
+    atualizarComparacao();
   }
-  ["cvcDist", "cvcHMot", "cvcHAju", "cvcDesp", "cvcPed"].forEach((id) => $(id).addEventListener("input", recalcular));
-  $("cvcVeiculo").addEventListener("change", recalcular);
-  $("cvcBtnMes").addEventListener("click", () => {
-    const v = M.veiculos[+$("cvcVeiculo").value]; if (!v) return;
-    $("cvcDist").value = +(num(v.autonomia) / 12).toFixed(4);
-    $("cvcHMot").value = 220;
-    recalcular();
+  function atualizarComparacao() {
+    const res = CEN.map((c) => {
+      const v = M.veiculos[c.vi];
+      return v ? calcularCustosDiretos(v, M.params, num(c.dist), num(c.hMot), num(c.hAju), num(c.desp), num(c.ped)) : null;
+    });
+    const carga = CEN.map((c, i) => (res[i] ? res[i].total * Math.max(1, num(c.qtd)) : 0));
+    document.querySelectorAll("#cvcGrade td[data-li]").forEach((td) => {
+      const r = res[+td.dataset.ci];
+      td.textContent = r ? fmtBRL(LINHAS[+td.dataset.li][1](r)) : "—";
+    });
+    const validos = carga.filter((x) => x > 0);
+    const menor = validos.length ? Math.min(...validos) : 0;
+    const comparar = validos.length > 1;
+    document.querySelectorAll("#cvcGrade td[data-x]").forEach((td) => {
+      const i = +td.dataset.ci, r = res[i], c = CEN[i];
+      td.classList.remove("cvc-melhor");
+      if (!r) { td.textContent = "—"; return; }
+      if (td.dataset.x === "porkm") td.textContent = num(c.dist) > 0 ? `${fmtBRL(r.porKm)} / km` : "—";
+      else if (td.dataset.x === "carga") {
+        td.textContent = carga[i] > 0 ? fmtBRL(carga[i]) + (comparar && carga[i] === menor ? "  ✔ menor custo" : "") : "—";
+        if (comparar && carga[i] === menor) td.classList.add("cvc-melhor");
+      } else if (td.dataset.x === "dif") {
+        td.textContent = !comparar || !(carga[i] > 0) ? "—" : carga[i] === menor ? "—" : `+ ${fmtBRL(carga[i] - menor)} (+${fmtNum(((carga[i] - menor) / menor) * 100, 1)}%)`;
+      }
+    });
+  }
+  const recalcular = atualizarComparacao;
+
+  const aoMudarCenario = (e) => {
+    const el = e.target; if (el.dataset.ci === undefined) return;
+    CEN[+el.dataset.ci][el.dataset.k] = el.tagName === "SELECT" ? +el.value : num(el.value);
+    atualizarComparacao();
+  };
+  $("cvcGrade").addEventListener("input", aoMudarCenario);
+  $("cvcGrade").addEventListener("change", aoMudarCenario);
+  $("cvcGrade").addEventListener("click", (e) => {
+    const rem = e.target.closest("[data-crem]");
+    if (rem) { CEN.splice(+rem.dataset.crem, 1); renderComparacao(); return; }
+    const mes = e.target.closest("[data-cmes]");
+    if (mes) {
+      const c = CEN[+mes.dataset.cmes], v = M.veiculos[c.vi];
+      if (v) { c.dist = +(num(v.autonomia) / 12).toFixed(4); c.hMot = 220; renderComparacao(); }
+    }
+  });
+  $("cvcBtnAdd").addEventListener("click", () => {
+    const ult = CEN[CEN.length - 1];
+    CEN.push(novoCenario((ult.vi + 1) % M.veiculos.length, ult));
+    renderComparacao();
   });
 
   /* ---------- início ---------- */

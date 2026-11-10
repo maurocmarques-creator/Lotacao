@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calculadora de Frete</title>
-<link rel="stylesheet" href="style.css?v=202611092035">
-<link rel="stylesheet" href="custo.css?v=202611092035">
-<link rel="stylesheet" href="carga.css?v=202611092035">
+<link rel="stylesheet" href="style.css?v=202611100637">
+<link rel="stylesheet" href="custo.css?v=202611100637">
+<link rel="stylesheet" href="carga.css?v=202611100637">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -453,19 +453,115 @@
 
   <!-- ===================== ABA CUSTO OPERACIONAL (CÁLCULO) ===================== -->
   <section id="tab-custoCalculo" class="tab-panel">
-    <div class="card">
-      <h2>Custo Operacional &mdash; Custos Diretos</h2>
-      <p class="hint">
-        Cada coluna é um veículo. Digite a distância e o tempo operacional: o custo por km do
-        cadastro (combustível, manutenção, depreciação) é multiplicado pela distância; a mão de
-        obra é o custo/hora × horas; despesas e pedágio entram como digitados. Use <b>+ Adicionar
-        veículo para comparar</b> para ver, por exemplo, uma Van ao lado de um 3/4 (ou 2 vans
-        contra 1 três-quartos pela “Quantidade de veículos”) e saber qual sai mais barato para a
-        carga. Nada aqui é salvo no Histórico.
-      </p>
-      <div class="cv-scroll"><table class="cvc-grade" id="cvcGrade"></table></div>
-      <div class="cv-botoes">
-        <button type="button" id="cvcBtnAdd" class="btn-primary">+ Adicionar veículo para comparar</button>
+    <div class="cv-subtabs" role="group" aria-label="Custo Operacional">
+      <button type="button" class="cv-subtab" data-sub="calculo" aria-pressed="true">Cálculo</button>
+      <button type="button" class="cv-subtab" data-sub="prestacao" aria-pressed="false">Prestação de Contas</button>
+    </div>
+
+    <div id="cvSubCalculo">
+      <div class="card">
+        <h2>Custo Operacional &mdash; Custos Diretos</h2>
+        <p class="hint">
+          Cada coluna é um veículo. Digite a distância e o tempo operacional: o custo por km do
+          cadastro (combustível, manutenção, depreciação) é multiplicado pela distância; a mão de
+          obra é o custo/hora × horas; despesas e pedágio entram como digitados. Use <b>+ Adicionar
+          veículo para comparar</b> para ver, por exemplo, uma Van ao lado de um 3/4 (ou 2 vans
+          contra 1 três-quartos pela “Quantidade de veículos”) e saber qual sai mais barato para a
+          carga.
+        </p>
+        <div class="cv-scroll"><table class="cvc-grade" id="cvcGrade"></table></div>
+        <div class="cv-botoes">
+          <button type="button" id="cvcBtnAdd" class="btn-primary">+ Adicionar veículo para comparar</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Salvar este cálculo</h2>
+        <p class="hint">Guarda a comparação (veículos, distâncias, horas e resultados) para consultar depois e para comparar com uma Prestação de Contas.</p>
+        <label class="campo-largo">Identificação do cálculo
+          <input type="text" id="cvcNome" placeholder="ex.: Van x 3/4 — Itajaí → São Paulo">
+        </label>
+        <div class="cv-botoes">
+          <button type="button" id="cvcBtnSalvar" class="btn-primary">Salvar cálculo</button>
+          <button type="button" id="cvcBtnNovo" class="btn-secondary" hidden>Novo cálculo (limpar)</button>
+          <span class="save-msg" id="cvcMsg"></span>
+        </div>
+        <h3 class="cv-sub" style="margin-top:18px">Cálculos salvos</h3>
+        <ul class="cv-lista" id="cvcLista"></ul>
+      </div>
+    </div>
+
+    <div id="cvSubPrestacao" hidden>
+      <div class="card">
+        <div class="pc-topo">
+          <h2>Prestação de Contas</h2>
+          <button type="button" id="pcBtnNova" class="btn-secondary">Nova prestação</button>
+        </div>
+        <h3 class="cv-sub">Prestações salvas</h3>
+        <ul class="cv-lista" id="pcLista"></ul>
+      </div>
+
+      <div class="card">
+        <div class="pc-cabecalho">
+          <label>Nº Controle<input type="text" id="pcNumero"></label>
+          <label>Data de Abertura<input type="date" id="pcAbertura"></label>
+        </div>
+        <p class="hint"><b>Referente a despesas de viagens</b></p>
+        <div class="cv-scroll">
+          <table class="pc-tabela">
+            <thead><tr>
+              <th>Descrição de Aplicação</th><th>Nº NF</th><th>Data / Dia da Semana</th><th>Hora</th><th>Valor (R$)</th>
+              <th>Forma Pagamento (Débito / Crédito / Dinheiro)</th><th title="Usada só para comparar com o cálculo">Categoria</th><th></th>
+            </tr></thead>
+            <tbody id="pcLinhas"></tbody>
+          </table>
+        </div>
+        <button type="button" id="pcBtnAddLinha" class="btn-secondary" style="margin-top:8px">+ Adicionar linha</button>
+
+        <div class="pc-resumo">
+          <div class="pc-bloco">
+            <div class="pc-linha"><span>CUSTO TOTAL</span><b id="pcCustoTotal">R$ 0,00</b></div>
+            <label class="pc-linha">Valor Adiantado Dinheiro<input type="number" id="pcAdiantado" min="0" step="0.01" value="0"></label>
+            <div class="pc-linha"><span>Valor Utilizado (pago em dinheiro)</span><b id="pcUtilizado">R$ 0,00</b></div>
+            <div class="pc-linha"><span>Saldo Final</span><b id="pcSaldo">R$ 0,00</b></div>
+          </div>
+          <div class="pc-assinaturas">
+            <div><i></i>Visto do Colaborador</div>
+            <div><i></i>Visto da Gerência</div>
+          </div>
+        </div>
+
+        <div class="pc-viagem">
+          <label>Veículo<input type="text" id="pcVeiculo" list="pcVeiculosLista" placeholder="Digite ou escolha do cadastro"><datalist id="pcVeiculosLista"></datalist></label>
+          <label>Motorista<input type="text" id="pcMotorista"></label>
+          <label>Destino<input type="text" id="pcDestino"></label>
+          <label>Km Inicial<input type="number" id="pcKmIni" min="0" step="any"></label>
+          <label>Km Final<input type="number" id="pcKmFim" min="0" step="any"></label>
+          <div class="pc-calc"><span>Km Percorrido</span><b id="pcKmPerc">0</b></div>
+          <label>Data e Hora Início Viagem<input type="datetime-local" id="pcInicio"></label>
+          <label>Data e Hora Término Viagem<input type="datetime-local" id="pcFim"></label>
+          <label>Comissão Final (R$)<input type="number" id="pcComissao" min="0" step="0.01" value="0"></label>
+        </div>
+
+        <div class="result-box dre-manual-pct" id="pcEfetivoBox">
+          <span class="result-label">Custo efetivo da viagem (Custo Total + Comissão Final)</span>
+          <span class="result-value" id="pcEfetivo">R$ 0,00</span>
+        </div>
+        <div class="cv-botoes">
+          <button type="button" id="pcBtnSalvar" class="btn-primary">Salvar prestação</button>
+          <button type="button" id="pcBtnExcluir" class="btn-secondary" hidden>Excluir esta prestação</button>
+          <span class="save-msg" id="pcMsg"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Comparar com o cálculo</h2>
+        <p class="hint">Escolha um cálculo salvo para ver o estimado (Custo Operacional) contra o real (esta prestação). Use a coluna Categoria nas linhas da prestação para a comparação por item.</p>
+        <div class="pc-cabecalho">
+          <label>Cálculo salvo<select id="pcCalculo"></select></label>
+          <label>Veículo do cálculo<select id="pcCenario"></select></label>
+        </div>
+        <div class="cv-scroll"><table class="pc-tabela pc-comp" id="pcComparacao"></table></div>
       </div>
     </div>
   </section>
@@ -1027,10 +1123,10 @@
   <p>Dados compartilhados entre todos os acessos &middot; distância via OpenStreetMap/OSRM, OpenRouteService ou QualP</p>
 </footer>
 
-<script src="app.js?v=202611092035"></script>
+<script src="app.js?v=202611100637"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="custo.js?v=202611092035"></script>
-<script src="carga.js?v=202611092035"></script>
+<script src="custo.js?v=202611100637"></script>
+<script src="carga.js?v=202611100637"></script>
 </body>
 </html>

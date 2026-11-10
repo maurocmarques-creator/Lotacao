@@ -29,7 +29,40 @@ table.cvc-grade th label { display: block; margin-top: 6px; font-size: 11.5px; f
 table.cvc-grade th input, table.cvc-grade th select { width: 100%; min-width: 0; padding: 5px 6px; font-size: 13px; margin-top: 2px; }
 .cvc-topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .cvc-topo .btn-remove { width: 22px; height: 22px; }
-.cvc-mes { margin-top: 8px; padding: 5px 8px; font-size: 12px; }
 table.cvc-grade tr.cvc-total td { font-weight: 700; background: var(--blue-100); }
 table.cvc-grade tr.dre-subitem td.cvc-rot { padding-left: 24px; color: var(--gray-500); }
 table.cvc-grade td.cvc-melhor { background: var(--green-100); color: var(--green-600); }
+
+.cv-subtabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.cv-subtab { padding: 8px 16px; border: 1px solid var(--gray-200); background: #fff; border-radius: 8px; cursor: pointer; font-weight: 600; color: var(--gray-800); }
+.cv-subtab[aria-pressed="true"] { background: var(--blue-500); color: #fff; border-color: var(--blue-500); }
+#cvSubCalculo[hidden], #cvSubPrestacao[hidden], #cvcBtnNovo[hidden], #pcBtnExcluir[hidden] { display: none; }
+ul.cv-lista { list-style: none; margin: 8px 0 0; padding: 0; max-height: 240px; overflow-y: auto; }
+ul.cv-lista li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--gray-200); border-radius: 6px; margin-bottom: 6px; cursor: pointer; font-size: 13px; }
+ul.cv-lista li:hover { background: var(--blue-100); }
+ul.cv-lista li.cv-ativo { border-color: var(--blue-500); background: var(--blue-100); }
+ul.cv-lista li.cv-vazio { color: var(--gray-500); font-style: italic; cursor: default; border: none; }
+.pc-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.pc-topo h2 { margin: 0 0 8px; }
+.pc-cabecalho { display: grid; grid-template-columns: repeat(2, minmax(0, 260px)); gap: 12px 16px; margin-bottom: 12px; }
+table.pc-tabela { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.pc-tabela th, table.pc-tabela td { border: 1px solid var(--gray-200); padding: 4px 6px; vertical-align: middle; }
+table.pc-tabela th { background: var(--gray-100); font-size: 12px; text-align: center; }
+table.pc-tabela input, table.pc-tabela select { width: 100%; min-width: 0; padding: 5px 6px; font-size: 13px; }
+table.pc-tabela td.pc-data small { display: block; color: var(--gray-500); font-size: 11px; text-transform: capitalize; min-height: 13px; }
+table.pc-tabela .btn-remove { width: 22px; height: 22px; }
+table.pc-comp td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+table.pc-comp tr.pc-total td { font-weight: 700; background: var(--blue-100); }
+.pc-neg { color: #c0392b; } .pc-pos { color: var(--green-600); }
+.pc-resumo { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 24px; margin-top: 16px; align-items: flex-start; }
+.pc-bloco { min-width: 320px; }
+.pc-linha { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--gray-200); font-size: 13.5px; }
+.pc-linha input { width: 130px; text-align: right; }
+.pc-assinaturas { display: flex; gap: 40px; align-items: flex-end; color: var(--gray-500); font-size: 12.5px; padding-top: 26px; }
+.pc-assinaturas div { text-align: center; width: 190px; }
+.pc-assinaturas i { display: block; border-top: 1px solid var(--gray-500); margin-bottom: 4px; }
+.pc-viagem { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; margin: 16px 0; }
+.pc-calc { display: flex; flex-direction: column; justify-content: flex-end; font-size: 12.5px; color: var(--gray-500); padding-bottom: 8px; }
+.pc-calc b { font-size: 16px; color: var(--blue-900); }
+#pcEfetivoBox { margin-top: 8px; }
+@media (max-width: 800px) { .pc-viagem, .pc-cabecalho { grid-template-columns: minmax(0, 1fr); } }

@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calculadora de Frete</title>
-<link rel="stylesheet" href="style.css?v=202611100637">
-<link rel="stylesheet" href="custo.css?v=202611100637">
-<link rel="stylesheet" href="carga.css?v=202611100637">
+<link rel="stylesheet" href="style.css?v=202611100651">
+<link rel="stylesheet" href="custo.css?v=202611100651">
+<link rel="stylesheet" href="carga.css?v=202611100651">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -35,6 +35,7 @@
         <button class="tab-btn dropdown-item" data-tab="antt">Cadastro ANTT</button>
         <button class="tab-btn dropdown-item" data-tab="veiculos">Custo por KM</button>
         <button class="tab-btn dropdown-item" data-tab="custoVeiculo">Custo do Veículo</button>
+        <button class="tab-btn dropdown-item" data-tab="categorias">Categorias de Despesa</button>
         <button class="tab-btn dropdown-item" data-tab="spot">Custo Operação SPOT</button>
         <button class="tab-btn dropdown-item" data-tab="icms">ICMS</button>
         <button class="tab-btn dropdown-item" data-tab="rota">Rota</button>
@@ -442,6 +443,12 @@
         e usados na aba Cálculo do Transporte &rsaquo; Custo Operacional. Os valores iniciais vêm da
         planilha de 10/09/2026; edite e clique em <b>Salvar cadastro</b> para valer para todos.
       </p>
+      <h3 class="cv-sub">Parâmetros de viagem (usados no Custo Operacional)</h3>
+      <div class="cv-params">
+        <label>Alimentação por dia de viagem (R$)<input type="number" id="cvpAlim" min="0" step="0.01"></label>
+        <label>Hospedagem por noite (R$)<input type="number" id="cvpHosp" min="0" step="0.01"></label>
+        <label>Comissão por km rodado (R$)<input type="number" id="cvpCom" min="0" step="0.01"></label>
+      </div>
       <div class="cv-scroll"><table class="cv-grade" id="cvGrade"></table></div>
       <div class="cv-botoes">
         <button type="button" id="cvBtnAdd" class="btn-secondary">+ Adicionar veículo</button>
@@ -462,9 +469,11 @@
       <div class="card">
         <h2>Custo Operacional &mdash; Custos Diretos</h2>
         <p class="hint">
-          Cada coluna é um veículo. Digite a distância e o tempo operacional: o custo por km do
-          cadastro (combustível, manutenção, depreciação) é multiplicado pela distância; a mão de
-          obra é o custo/hora × horas; despesas e pedágio entram como digitados. Use <b>+ Adicionar
+          Cada coluna é um veículo. Informe o período (início e fim), a cidade de início e as cidades
+          do percurso, a distância e o tempo operacional. O custo por km do cadastro é multiplicado
+          pela distância; a mão de obra é o custo/hora × horas; a <b>alimentação</b> (por dia de
+          viagem) e a <b>hospedagem</b> (por noite) entram na Despesa (diária/alimentação) e podem
+          ser alteradas na mão; a <b>comissão</b> é o km rodado × R$ por km. Use <b>+ Adicionar
           veículo para comparar</b> para ver, por exemplo, uma Van ao lado de um 3/4 (ou 2 vans
           contra 1 três-quartos pela “Quantidade de veículos”) e saber qual sai mais barato para a
           carga.
@@ -485,6 +494,7 @@
           <button type="button" id="cvcBtnSalvar" class="btn-primary">Salvar cálculo</button>
           <button type="button" id="cvcBtnNovo" class="btn-secondary" hidden>Novo cálculo (limpar)</button>
           <span class="save-msg" id="cvcMsg"></span>
+          <b class="cv-numero" id="cvcNumero"></b>
         </div>
         <h3 class="cv-sub" style="margin-top:18px">Cálculos salvos</h3>
         <ul class="cv-lista" id="cvcLista"></ul>
@@ -503,7 +513,9 @@
 
       <div class="card">
         <div class="pc-cabecalho">
-          <label>Nº Controle<input type="text" id="pcNumero"></label>
+          <label>Cálculo (define o Nº Controle)<select id="pcCalculo"></select></label>
+          <label>Veículo do cálculo<select id="pcCenario"></select></label>
+          <label>Nº Controle<input type="text" id="pcNumero" readonly placeholder="igual ao do cálculo"></label>
           <label>Data de Abertura<input type="date" id="pcAbertura"></label>
         </div>
         <p class="hint"><b>Referente a despesas de viagens</b></p>
@@ -556,12 +568,30 @@
 
       <div class="card">
         <h2>Comparar com o cálculo</h2>
-        <p class="hint">Escolha um cálculo salvo para ver o estimado (Custo Operacional) contra o real (esta prestação). Use a coluna Categoria nas linhas da prestação para a comparação por item.</p>
-        <div class="pc-cabecalho">
-          <label>Cálculo salvo<select id="pcCalculo"></select></label>
-          <label>Veículo do cálculo<select id="pcCenario"></select></label>
-        </div>
+        <p class="hint">Compara o estimado do cálculo escolhido no topo (mesmo Nº Controle) com o real desta prestação. Cada linha entra pelo item que a sua <b>categoria</b> indica no cadastro Categorias de Despesa.</p>
         <div class="cv-scroll"><table class="pc-tabela pc-comp" id="pcComparacao"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ABA CADASTRO CATEGORIAS DE DESPESA ===================== -->
+  <section id="tab-categorias" class="tab-panel">
+    <div class="card">
+      <h2>Cadastro &mdash; Categorias de Despesa</h2>
+      <p class="hint">
+        Categorias usadas nas linhas da Prestação de Contas (Custo Operacional). A coluna
+        <b>Compara com</b> diz em qual item do cálculo a categoria entra na comparação estimado ×
+        real (Alimentação, Combustível, Hospedagem, Manutenção, Pedágio ou Outros). Dá para criar
+        categorias novas, por exemplo “Chapa / descarga” comparando com Outros.
+      </p>
+      <table class="pc-tabela cat-tabela">
+        <thead><tr><th>Categoria</th><th>Compara com</th><th></th></tr></thead>
+        <tbody id="catLinhas"></tbody>
+      </table>
+      <div class="cv-botoes">
+        <button type="button" id="catBtnAdd" class="btn-secondary">+ Adicionar categoria</button>
+        <button type="button" id="catBtnSalvar" class="btn-primary">Salvar categorias</button>
+        <span class="save-msg" id="catMsg"></span>
       </div>
     </div>
   </section>
@@ -1123,10 +1153,10 @@
   <p>Dados compartilhados entre todos os acessos &middot; distância via OpenStreetMap/OSRM, OpenRouteService ou QualP</p>
 </footer>
 
-<script src="app.js?v=202611100637"></script>
+<script src="app.js?v=202611100651"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="custo.js?v=202611100637"></script>
-<script src="carga.js?v=202611100637"></script>
+<script src="custo.js?v=202611100651"></script>
+<script src="carga.js?v=202611100651"></script>
 </body>
 </html>

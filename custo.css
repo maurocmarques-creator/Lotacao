@@ -44,7 +44,7 @@ ul.cv-lista li.cv-ativo { border-color: var(--blue-500); background: var(--blue-
 ul.cv-lista li.cv-vazio { color: var(--gray-500); font-style: italic; cursor: default; border: none; }
 .pc-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .pc-topo h2 { margin: 0 0 8px; }
-.pc-cabecalho { display: grid; grid-template-columns: repeat(2, minmax(0, 260px)); gap: 12px 16px; margin-bottom: 12px; }
+.pc-cabecalho { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; margin-bottom: 12px; }
 table.pc-tabela { border-collapse: collapse; width: 100%; font-size: 13px; }
 table.pc-tabela th, table.pc-tabela td { border: 1px solid var(--gray-200); padding: 4px 6px; vertical-align: middle; }
 table.pc-tabela th { background: var(--gray-100); font-size: 12px; text-align: center; }
@@ -66,3 +66,19 @@ table.pc-comp tr.pc-total td { font-weight: 700; background: var(--blue-100); }
 .pc-calc b { font-size: 16px; color: var(--blue-900); }
 #pcEfetivoBox { margin-top: 8px; }
 @media (max-width: 800px) { .pc-viagem, .pc-cabecalho { grid-template-columns: minmax(0, 1fr); } }
+
+.cv-params { display: grid; grid-template-columns: repeat(3, minmax(0, 240px)); gap: 12px 16px; margin-bottom: 16px; }
+@media (max-width: 800px) { .cv-params { grid-template-columns: minmax(0, 1fr); } }
+.cvc-rota { margin-top: 6px; }
+.cvc-lbl { display: block; margin: 6px 0 2px; font-size: 11.5px; font-weight: 600; color: var(--gray-500); }
+.cvc-cid { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; }
+.cvc-cid .autocomplete-wrap { flex: 1; min-width: 0; }
+.cvc-add-cid { margin-top: 2px; padding: 4px 8px; font-size: 12px; }
+small.cvc-auto { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: var(--gray-500); }
+.cvc-reset { border: 0; background: none; color: var(--blue-500); cursor: pointer; font-size: 11px; padding: 0; text-decoration: underline; }
+table.cvc-grade td.cvc-txt { text-align: left; font-size: 12px; color: var(--gray-800); }
+table.cvc-grade tr.cvc-info td { background: #fff; }
+table.pc-comp tr.pc-sec td { color: var(--gray-500); }
+
+.cv-numero { color: var(--blue-900); font-size: 14px; }
+table.cat-tabela { max-width: 620px; }
